@@ -1,0 +1,33 @@
+{
+  "_about": "Source plugins. Edit this file freely — no code change required.",
+  "_ethics": "B2B-only leads. No scraping of personal contact data. Respect each network's robots.txt and rate limits.",
+  "shopify_stores": [
+    "https://example.myshopify.com"
+  ],
+  "reddit": {
+    "enabled": true,
+    "subreddits": [
+      "dropship",
+      "ecommerce",
+      "FulfillmentByAmazon",
+      "Shopify",
+      "Entrepreneur"
+    ],
+    "limit_per_sub": 50
+  },
+  "tiktok": {
+    "enabled": false,
+    "_note": "Requires TikTok Research API access. Treat unofficial scraping as accelerator only.",
+    "hashtags": []
+  },
+  "meta_ads": {
+    "enabled": true,
+    "_note": "Meta Ad Library —>30 days running is the validated-profit signal. No maintained library; build a thin httpx scraper that respects robots.txt.",
+    "queries": []
+  },
+  "_scrape_policies": {
+    "max_concurrent_per_domain": 2,
+    "request_jitter_seconds": [1, 3],
+    "user_agent": "trend-hunter/0.1 (anonwiz; +https://github.com/)"
+  }
+}

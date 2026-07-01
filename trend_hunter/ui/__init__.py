@@ -1,0 +1,1 @@
+"""Trend-hunter Streamlit UI."""

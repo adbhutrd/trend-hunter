@@ -1,0 +1,40 @@
+# editor / OS
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# venv + dependency caches
+.venv/
+venv/
+.python-version
+.pdm-build/
+
+# type / lint caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# secrets
+.env
+.streamlit/secrets.toml
+
+# data + logs (everything inside `data/` is local-only and may contain PII)
+data/
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.csv
+*.log
+
+# backups
+backups/
