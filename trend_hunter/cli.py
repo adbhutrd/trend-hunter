@@ -15,16 +15,18 @@ Usage
     python -m trend_hunter.cli stats
     python -m trend_hunter.cli doctor
     python -m trend_hunter.cli forget <email>
+    python -m trend_hunter.cli loop-report                 # 7d feed-back loop summary
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import sys
-from datetime import UTC
+from pathlib import Path
 
 from trend_hunter.core.config import get_settings
 from trend_hunter.core.logging import configure, get
+from trend_hunter.observe.run_ledger import record_run
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -41,24 +43,29 @@ def _open_reader():
 # ── ingest / aggregate ────────────────────────────────────────────────────────
 def _cmd_scan(_args: argparse.Namespace) -> None:
     from trend_hunter.ingest.runner import run_once
-    with _open_writer() as storage:
+    with _open_writer() as storage, record_run("scan") as rec:
         summary = asyncio.run(run_once(storage))
+        rec.set_counters({"products_in": int(summary.get("total", 0))})
     get().info(f"scan summary: {summary}")
 
 
 def _cmd_run(_args: argparse.Namespace) -> None:
     """scan + classify + aggregate + doctor — single writer session + read-only doctor."""
-    log = get()
     from trend_hunter.ingest.runner import run_once
     from trend_hunter.intelligence.aggregator import aggregate, classify_all
     from trend_hunter.scripts.doctor import doctor
 
-    with _open_writer() as storage:
+    log = get()
+    with _open_writer() as storage, record_run("run") as rec:
         scan_summary = asyncio.run(run_once(storage))
         log.info(f"scan summary: {scan_summary}")
         agg = aggregate(storage)
         n = classify_all(storage)
         log.info(f"aggregate: {agg}; classified={n}")
+        rec.set_counters({
+            "products_in": int(scan_summary.get("total", 0)),
+            "classified": int(n),
+        })
     rc = doctor()
     if rc != 0:
         sys.exit(rc)
@@ -66,9 +73,10 @@ def _cmd_run(_args: argparse.Namespace) -> None:
 
 def _cmd_aggregate(_args: argparse.Namespace) -> None:
     from trend_hunter.intelligence.aggregator import aggregate, classify_all
-    with _open_writer() as storage:
+    with _open_writer() as storage, record_run("aggregate") as rec:
         out = aggregate(storage)
         n = classify_all(storage)
+        rec.set_counters({"classified": int(n)})
     get().info(f"aggregate: {out}; classified={n}")
 
 
@@ -84,7 +92,7 @@ def _cmd_forecast(_args: argparse.Namespace) -> None:
     from trend_hunter.adapters.forecaster_baseline import BaselineForecaster
 
     fc = BaselineForecaster()
-    now = datetime.now(UTC)
+    now = datetime.now(__import__("datetime").UTC)
     history = [(now - timedelta(days=6 - i), 10.0 + 1.5 * i) for i in range(7)]
     out = fc.fit_predict(history, horizon_days=14)
     print(
@@ -94,16 +102,15 @@ def _cmd_forecast(_args: argparse.Namespace) -> None:
 
 
 def _cmd_arbitrage(_args: argparse.Namespace) -> None:
-    from pathlib import Path
-
     from trend_hunter.adapters.supplier_catalog import CsvCatalogSupplier, MockSupplier
     from trend_hunter.money.arbitrage import scan, summary
 
-    with _open_writer() as storage:
+    with _open_writer() as storage, record_run("arbitrage") as rec:
         cat = CsvCatalogSupplier(Path("./data/suppliers.csv"))
         rows = scan(storage, cat if cat._items else MockSupplier())    # type: ignore[arg-type]
+        rec.set_counters({"money_rows": summary(rows)["count"]})
     s = summary(rows)
-    print(f"  arbitrage: {s}")
+    get().info(f"  arbitrage: {s}")
     for r in rows[:10]:
         print(
             f"    {r.sku:40} retail=${r.retail_price:6.2f} "
@@ -114,9 +121,15 @@ def _cmd_arbitrage(_args: argparse.Namespace) -> None:
 
 def _cmd_validate_ads(_args: argparse.Namespace) -> None:
     from trend_hunter.adapters.ads_validator import AdsValidator
-    v = AdsValidator()
-    validated = v.validated()
-    print(f"  ads: {len(v.all())} entries, {len(validated)} validated (≥30 days running)")
+
+    with _open_writer(), record_run("validate-ads") as rec:
+        v = AdsValidator()
+        validated = v.validated()
+        rec.set_counters({"validated": len(validated)})
+    print(
+        f"  ads: {len(v.all())} entries, "
+        f"{len(validated)} validated (≥30 days running)",
+    )
     for a in validated[:20]:
         print(
             f"    {a.advertiser:20} niche={a.niche:20} "
@@ -125,41 +138,49 @@ def _cmd_validate_ads(_args: argparse.Namespace) -> None:
 
 
 def _cmd_scaffold(args: argparse.Namespace) -> None:
-    from pathlib import Path
-
     from trend_hunter.adapters.supplier_catalog import CsvCatalogSupplier, MockSupplier
     from trend_hunter.money.arbitrage import scan
     from trend_hunter.money.scaffold_pipeline import scaffold
 
     live = bool(args.live)
     top = int(args.top)
-    with _open_writer() as storage:
+    with _open_writer() as storage, record_run("scaffold") as rec:
         cat = CsvCatalogSupplier(Path("./data/suppliers.csv"))
         rows = scan(storage, cat if cat._items else MockSupplier())    # type: ignore[arg-type]
-    out = scaffold(rows, top=top, dry_run=not live)
+        out = scaffold(rows, top=top, dry_run=not live)
+        rec.set_counters({
+            "scaffolded": sum(
+                1 for r in out if r.get("status") in {"drafted", "pushed"}
+            ),
+        })
     print(f"  scaffold: top={top} dry_run={not live}; results:")
     for r in out:
         print(f"    {r.get('status'):12} sku={r.get('sku')}")
     if not live:
-        print("  (set TH_SHOPIFY_DOMAIN + TH_SHOPIFY_TOKEN env vars and pass --live to actually push)")
+        print(
+            "  (set TH_SHOPIFY_DOMAIN + TH_SHOPIFY_TOKEN env vars "
+            "and pass --live to actually push)",
+        )
 
 
 def _cmd_money_sweep(args: argparse.Namespace) -> None:
-    from pathlib import Path
-
     from trend_hunter.adapters.supplier_catalog import CsvCatalogSupplier, MockSupplier
     from trend_hunter.money.arbitrage import scan, summary
     from trend_hunter.money.scaffold_pipeline import scaffold
 
     live = bool(args.live)
     top = int(args.top)
-    with _open_writer() as storage:
+    with _open_writer() as storage, record_run("money-sweep") as rec:
         cat = CsvCatalogSupplier(Path("./data/suppliers.csv"))
         supplier = cat if cat._items else MockSupplier()              # type: ignore[assignment]
         rows = scan(storage, supplier)
         s = summary(rows)
         print(f"  money sweep: {s}")
         out = scaffold(rows, top=top, dry_run=not live)
+        rec.set_counters({
+            "money_rows": s["count"],
+            "scaffolded": sum(1 for r in out if r.get("status") in {"drafted", "pushed"}),
+        })
     print(f"  scaffold: {len(out)} push result(s):")
     for r in out:
         print(f"    {r.get('status'):12} sku={r.get('sku')}")
@@ -169,7 +190,6 @@ def _cmd_schedule(_args: argparse.Namespace) -> None:
     from trend_hunter.flows.daily import start
     sched = start()
     try:
-        # block forever; systemd will stop us cleanly
         while True:
             import time
             time.sleep(3600)
@@ -191,9 +211,28 @@ def _cmd_dashboard(_args: argparse.Namespace) -> None:
     subprocess.run(cmd, check=False)
 
 
+def _cmd_migrate(_args: argparse.Namespace) -> None:
+    """Open the writer briefly so pending migrations get applied.
+
+    Read-only CLI commands (stats, loop-report) do not auto-migrate;
+    running ``python -m trend_hunter.cli migrate`` once after pulling
+    new schema migrations keeps everything in sync.
+    """
+    log = get()
+    with _open_writer() as storage:
+        versions = storage.query(
+            "SELECT version FROM _schema_version ORDER BY version",
+        )
+    log.info(
+        f"migrate: applied schema versions = "
+        f"{[r['version'] for r in versions]}",
+    )
+
+
 def _cmd_stats(_args: argparse.Namespace) -> None:
     with _open_reader() as storage:
-        for table in ("products", "leads", "money", "rop_audit", "health", "forecasts"):
+        for table in ("products", "leads", "money", "rop_audit",
+                      "health", "forecasts", "run_history"):
             try:
                 n = storage.query(f"SELECT count(*) AS n FROM {table}")[0]["n"]
             except Exception:
@@ -206,7 +245,7 @@ def _cmd_forget(args: argparse.Namespace) -> None:
     import hashlib
     subject_email = args.email
     subject_hash = hashlib.sha256(subject_email.encode()).hexdigest()[:16]
-    with _open_writer() as storage:
+    with _open_writer() as storage, record_run("forget", dedupe_key=subject_hash) as rec:
         before = storage.query(
             "SELECT count(*) AS n FROM leads WHERE contact_email = ?",
             (subject_email,),
@@ -228,7 +267,16 @@ def _cmd_forget(args: argparse.Namespace) -> None:
                 f"GDPR Art. 17 erasure; matched rows={before}",
             ),
         )
+        rec.set_counters({"audits": before})
         get().info(f"forget: {before} lead row(s) dropped; audit hash {subject_hash}")
+
+
+# ── loop-report ────────────────────────────────────────────────────────────────
+def _cmd_loop_report(args: argparse.Namespace) -> None:
+    from trend_hunter.observe.loop_report import render
+    days = int(args.days)
+    with _open_reader() as storage:
+        print(render(storage, days=days))
 
 
 # ── parser ────────────────────────────────────────────────────────────────────
@@ -247,6 +295,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("doctor", help="self-test (DB, schema, free disk, freshness)").set_defaults(func=_cmd_doctor)
     sub.add_parser("dashboard", help="launch Streamlit on configured port").set_defaults(func=_cmd_dashboard)
     sub.add_parser("stats", help="row counts per table").set_defaults(func=_cmd_stats)
+    sub.add_parser(
+        "migrate",
+        help="open writer briefly to apply pending schema migrations",
+    ).set_defaults(func=_cmd_migrate)
     sub.add_parser("schedule", help="start APScheduler (foreground)").set_defaults(func=_cmd_schedule)
 
     ap = sub.add_parser("arbitrage", help="match trending products ↔ suppliers")
@@ -268,6 +320,13 @@ def build_parser() -> argparse.ArgumentParser:
     fp = sub.add_parser("forget", help="GDPR Art. 17 right-to-erasure")
     fp.add_argument("email")
     fp.set_defaults(func=_cmd_forget)
+
+    lrp = sub.add_parser(
+        "loop-report",
+        help="7d feedback-loop summary from run_history",
+    )
+    lrp.add_argument("--days", type=int, default=7)
+    lrp.set_defaults(func=_cmd_loop_report)
 
     return p
 

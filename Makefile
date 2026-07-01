@@ -10,13 +10,13 @@ PIP        := $(VENV)/bin/pip
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init install run scan doctor aggregate backup dashboard test lint clean money money-cycle forecast arbitrage scaffold ads
+.PHONY: help init install run scan doctor aggregate backup dashboard test lint clean money money-cycle forecast arbitrage scaffold ads loop-report migrate docs
 
 help: ## show this help
 	@awk 'BEGIN {FS = ":.*?## "; printf "Usage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} \
-		/^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+		/^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-# ── one-time setup ──────────────────────────────────────────────────────
+# ── one-time setup ──────────────────────────────────────────────────────────
 init: ## create venv + install deps + scaffold data dirs
 	@test -d $(VENV) || $(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip wheel
@@ -28,7 +28,7 @@ init: ## create venv + install deps + scaffold data dirs
 
 install: init ## alias for init
 
-# ── daily operational targets ──────────────────────────────────────────
+# ── daily operational targets ──────────────────────────────────────────────
 run: ## daily cycle: scan + classify + aggregate + doctor
 	$(VENV_PY) -m trend_hunter.cli run
 
@@ -50,6 +50,9 @@ arbitrage: ## match trending products ↔ supplier catalog
 ads: ## validate-ads command (list ads ≥ 30 days running)
 	$(VENV_PY) -m trend_hunter.cli validate-ads
 
+validate-ads: ads ## alias
+	$(VENV_PY) -m trend_hunter.cli validate-ads
+
 scaffold: ## scaffold top 3 profitable rows (dry-run by default)
 	$(VENV_PY) -m trend_hunter.cli scaffold --top 3
 
@@ -59,6 +62,12 @@ money: ## full money cycle: arbitrage → scaffold top 3
 money-cycle: ## full daily money cycle: scan → aggregate → money
 	$(VENV_PY) -m trend_hunter.cli run
 	$(VENV_PY) -m trend_hunter.cli money-sweep --top 3
+
+migrate: ## apply pending schema migrations (open writer briefly; safe to re-run)
+	$(VENV_PY) -m trend_hunter.cli migrate
+
+loop-report: migrate ## apply migrations then dump 7-day feedback summary from run_history
+	$(VENV_PY) -m trend_hunter.cli loop-report --days 7
 
 schedule: ## start APScheduler (foreground; systemd-friendly)
 	$(VENV_PY) -m trend_hunter.cli schedule
@@ -70,13 +79,16 @@ backup: ## snapshot local DB; rotate out-of-tree (restic / external drive)
 	cp data/trends.duckdb data/trends-$(shell date -u +%Y%m%d-%H%M%S).duckdb
 	@echo "  ✅ snapshot created (manual rotation; configure restic for off-host archival)"
 
-# ── dev targets ────────────────────────────────────────────────────────
+# ── dev targets ─────────────────────────────────────────────────────────────
 test: ## pytest
 	$(VENV_PY) -m pytest -q
 
 lint: ## ruff + mypy (lenient — Phase-1 noise tolerated)
 	$(VENV_PY) -m ruff check trend_hunter tests ; true
 	$(VENV_PY) -m mypy trend_hunter ; true
+
+docs: ## loop-engineering diagram from docs/LOOP_ENGINEERING.md
+	@echo "Open docs/LOOP_ENGINEERING.md in your editor for the live writeup."
 
 clean: ## remove build artifacts
 	@rm -rf .pytest_cache .ruff_cache .mypy_cache build dist *.egg-info

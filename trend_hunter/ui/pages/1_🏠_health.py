@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pandas as pd
 import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder
 from streamlit_autorefresh import st_autorefresh
