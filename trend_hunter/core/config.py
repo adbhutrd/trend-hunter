@@ -19,6 +19,8 @@ class Settings(BaseSettings):
 
     # ── storage ──
     db_path: Path = Field(default=Path("./data/trends.duckdb"))
+    ads_path: Path = Field(default=Path("./data/ads.json"))
+    suppliers_path: Path = Field(default=Path("./data/suppliers.csv"))
 
     # ── logging ──
     log_level: str = "INFO"
