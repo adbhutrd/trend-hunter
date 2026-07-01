@@ -1,8 +1,11 @@
 {
   "_about": "Source plugins. Edit this file freely — no code change required.",
   "_ethics": "B2B-only leads. No scraping of personal contact data. Respect each network's robots.txt and rate limits.",
+  "_note": "These are well-known public Shopify demo stores (Hydrogen preview, Shopify Pets, Crate). Swap for your own list of small indie brands before relying on real revenue. Each store responds to `/products.json` without auth.",
   "shopify_stores": [
-    "https://example.myshopify.com"
+    "https://hydrogen-preview.myshopify.com",
+    "https://shopify-pets.myshopify.com",
+    "https://crate.myshopify.com"
   ],
   "reddit": {
     "enabled": true,
