@@ -5,14 +5,13 @@ Run via:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import streamlit as st
 
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
 from trend_hunter.core.config import get_settings
 from trend_hunter.core.logging import configure
-
 
 st.set_page_config(
     page_title="trend-hunter",
@@ -37,7 +36,7 @@ def _get_storage() -> DuckDBStorage:
 st.title("🛰️ trend-hunter")
 st.caption(
     "Self-hosted Shopify trend-finder, B2B lead-generator, arbitrage engine.  "
-    f"DB: `{get_settings().db_path}`  ·  {datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC}",
+    f"DB: `{get_settings().db_path}`  ·  {datetime.now(UTC):%Y-%m-%d %H:%M UTC}",
 )
 
 st.info(
@@ -68,7 +67,7 @@ if not rows:
 
 # ── kpi cards ────────────────────────────────────────────────────────────────
 cols = st.columns(min(4, len(rows)))
-for col, row in zip(cols, rows):
+for col, row in zip(cols, rows, strict=False):
     icon = {"ok": "✅", "stale": "⚠️", "failing": "❌", "dead": "💀"}.get(
         row["state"], "❓",
     )

@@ -18,15 +18,13 @@ Exit code:
 from __future__ import annotations
 
 import shutil
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
 
 from loguru import logger
 
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
 from trend_hunter.core.config import get_settings
 from trend_hunter.core.logging import configure
-
 
 EXPECTED_SCHEMA_VERSION = 1
 MIN_FREE_DISK_MB = 200
@@ -76,7 +74,7 @@ def doctor() -> int:
 
             # ── 4. source heartbeat freshness ───────────────────────────────
             max_age = MAX_AGE_HOURS_DEFAULT
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age)
+            datetime.now(UTC) - timedelta(hours=max_age)
             rows = storage.query(
                 """
                 SELECT source, state, last_run, last_ok, error_rate, detail
@@ -91,7 +89,7 @@ def doctor() -> int:
                     name = r["source"]
                     state = r["state"]
                     last_run = r["last_run"]
-                    age = (datetime.now(timezone.utc) - last_run).total_seconds() / 3600 \
+                    age = (datetime.now(UTC) - last_run).total_seconds() / 3600 \
                         if last_run else None
                     if state in ("failing", "dead"):
                         log.error(

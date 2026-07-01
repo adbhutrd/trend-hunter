@@ -19,7 +19,6 @@ from .types import (
     Health,
     Lead,
     Money,
-    Product,
     RawSignal,
 )
 

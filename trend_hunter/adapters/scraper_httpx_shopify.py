@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -45,7 +45,7 @@ class ShopifyScraper:
     # ── Scraper protocol ───────────────────────────────────────────────────
     async def fetch(self) -> list[RawSignal]:
         signals: list[RawSignal] = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         async with httpx.AsyncClient(
             headers={"User-Agent": self.user_agent, "Accept": "application/json"},
             timeout=httpx.Timeout(self.timeout_s),

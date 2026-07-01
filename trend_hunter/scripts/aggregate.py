@@ -7,7 +7,7 @@ from trend_hunter.intelligence.aggregator import aggregate, classify_all
 
 
 def main() -> None:
-    s = get_settings()
+    get_settings()
     with open_storage(read_only=False) as storage:
         out = aggregate(storage)
         n = classify_all(storage)

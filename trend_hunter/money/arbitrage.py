@@ -11,8 +11,8 @@ to the `money` table so the dashboard can surface it as a daily ranking.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from loguru import logger
 

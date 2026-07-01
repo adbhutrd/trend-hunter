@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from trend_hunter.adapters.shopify_push import ShopifyPusher, ProductDraft
-from trend_hunter.money.scaffold_pipeline import draft_from_row, scaffold
+from trend_hunter.adapters.shopify_push import ProductDraft, ShopifyPusher
 from trend_hunter.money.arbitrage import MoneyRow
+from trend_hunter.money.scaffold_pipeline import draft_from_row, scaffold
 
 
 def _sample_row(margin: float = 0.4) -> MoneyRow:

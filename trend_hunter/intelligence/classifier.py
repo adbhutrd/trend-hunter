@@ -12,10 +12,9 @@ bursts in Phase 1. Prophet + ruptures come in Phase 3.
 """
 from __future__ import annotations
 
-import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Iterable
+from datetime import UTC, datetime, timedelta
 
 
 class Status:
@@ -71,12 +70,12 @@ def classify_one(
         return None
     src, ext, _, _ = history[0]
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     cutoff = now - timedelta(days=window_days)
     points = [
-        (t.astimezone(timezone.utc), p)
+        (t.astimezone(UTC), p)
         for s, e, t, p in history
-        if s == src and e == ext and t.astimezone(timezone.utc) >= cutoff and p is not None
+        if s == src and e == ext and t.astimezone(UTC) >= cutoff and p is not None
     ]
     points.sort(key=lambda x: x[0])
     if len(points) < 3:

@@ -18,8 +18,8 @@ from trend_hunter.core.logging import configure, get
 
 def _tick_scan() -> None:
     from trend_hunter.adapters.storage_duckdb import open_storage
-    from trend_hunter.intelligence.aggregator import aggregate, classify_all
     from trend_hunter.ingest.runner import run_once
+    from trend_hunter.intelligence.aggregator import aggregate, classify_all
 
     log = get()
     with open_storage() as storage:

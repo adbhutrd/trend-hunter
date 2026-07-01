@@ -10,7 +10,7 @@ Verifies that `DuckDBStorage` honours the Storage protocol:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
 from trend_hunter.core.types import HealthState
@@ -22,7 +22,7 @@ def test_schema_applied(storage: DuckDBStorage):
 
 
 def test_upsert_idempotent(storage: DuckDBStorage):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     sample = [{
         "source": "shopify",
         "external_id": "sku-1",
@@ -45,8 +45,8 @@ def test_query_returns_dicts(storage: DuckDBStorage):
     storage.upsert("health", [{
         "source": "shopify",
         "state": HealthState.OK.value,
-        "last_run": datetime.now(timezone.utc),
-        "last_ok": datetime.now(timezone.utc),
+        "last_run": datetime.now(UTC),
+        "last_ok": datetime.now(UTC),
         "rows_in": 10,
         "error_rate": 0.0,
         "detail": "ok",

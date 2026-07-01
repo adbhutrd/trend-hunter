@@ -11,14 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from loguru import logger
 
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
 from trend_hunter.core.ports import Scraper
-from trend_hunter.core.types import HealthState, RawSignal, TrendStatus
+from trend_hunter.core.types import HealthState, RawSignal
 
 
 # ── registration ─────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ async def run_once(storage: DuckDBStorage, scrapers: list[Scraper] | None = None
     results = await asyncio.gather(*tasks)
 
     summary: dict[str, int] = {}
-    run_ts = datetime.now(timezone.utc)
+    run_ts = datetime.now(UTC)
 
     for name, rows, err in results:
         if err is not None:

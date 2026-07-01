@@ -9,7 +9,7 @@ Operator flow:
 from __future__ import annotations
 
 import asyncio
-from typing import Iterable
+from collections.abc import Iterable
 
 from loguru import logger
 

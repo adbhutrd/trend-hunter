@@ -7,14 +7,13 @@ parquet-exported in Phase 2 via DuckDB's native Parquet writer.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 
 import pandas as pd
 from loguru import logger
 
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
-from trend_hunter.intelligence.classifier import Status, classify_one
+from trend_hunter.intelligence.classifier import classify_one
 
 
 # ── aggregates ───────────────────────────────────────────────────────────────
@@ -24,7 +23,7 @@ def aggregate(storage: DuckDBStorage) -> dict:
     Idempotent — running twice produces the same state for the same source data.
     """
     c = storage.conn()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Materialise raw → classified enrichment for every product with ≥3 obs.
     c.execute(
@@ -115,7 +114,7 @@ def classify_all(storage: DuckDBStorage) -> int:
         """,
     ).fetchall()
 
-    by_key: dict[tuple[str, str], tuple[str | None, list[tuple[str, str, "datetime", float | None]]]] = {}
+    by_key: dict[tuple[str, str], tuple[str | None, list[tuple[str, str, datetime, float | None]]]] = {}
     for src, ext, title, ts, price in rows:
         key = (src, ext)
         if key not in by_key:
@@ -139,7 +138,7 @@ def classify_all(storage: DuckDBStorage) -> int:
         })
 
     if classified:
-        df = pd.DataFrame(classified)
+        pd.DataFrame(classified)
         c.execute("DROP TABLE IF EXISTS agg_product_status")
         c.execute("CREATE TABLE agg_product_status AS SELECT * FROM df")
     else:

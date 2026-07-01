@@ -10,7 +10,6 @@ the Protocol seam in core/ports.Forecaster makes that a 1-file swap.
 """
 from __future__ import annotations
 
-import math
 import statistics
 from datetime import datetime
 

@@ -9,7 +9,6 @@ from streamlit_autorefresh import st_autorefresh
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
 from trend_hunter.core.config import get_settings
 
-
 st.set_page_config(page_title="Trends · trend-hunter", page_icon="📈", layout="wide")
 st.title("📈 Trends")
 st.caption(
@@ -98,7 +97,7 @@ filtered = [
 # ── KPI cards ────────────────────────────────────────────────────────────────
 if counts:
     css_cols = st.columns(len(counts))
-    for col, c in zip(css_cols, counts):
+    for col, c in zip(css_cols, counts, strict=False):
         col.metric(label=c["status"].upper(), value=c["n"])
 
 

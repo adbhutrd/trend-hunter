@@ -1,7 +1,7 @@
 """🏠 Health — heartbeat per source, last run, error rate, ingestion volume."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder
@@ -9,7 +9,6 @@ from streamlit_autorefresh import st_autorefresh
 
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
 from trend_hunter.core.config import get_settings
-
 
 st.set_page_config(page_title="Health · trend-hunter", page_icon="🏠", layout="wide")
 st.title("🏠 Health")
@@ -68,7 +67,7 @@ gb.configure_default_column(filter=True, sortable=True, resizable=True)
 gb.configure_pagination(paginationAutoPageSize=False)
 
 
-st.subheader(f"Per-source heartbeat — at {datetime.now(timezone.utc):%H:%M:%S} UTC")
+st.subheader(f"Per-source heartbeat — at {datetime.now(UTC):%H:%M:%S} UTC")
 AgGrid(
     _df,
     gridOptions=gb.build(),

@@ -10,7 +10,6 @@ import streamlit as st
 
 from trend_hunter.core.config import get_settings
 
-
 st.set_page_config(page_title="Settings · trend-hunter", page_icon="⚙️", layout="wide")
 st.title("⚙️ Settings")
 st.caption("Edit `sources.json`, run `doctor`, view effective configuration.")

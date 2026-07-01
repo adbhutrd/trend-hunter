@@ -12,18 +12,16 @@ Design points (religiously):
 from __future__ import annotations
 
 import contextlib
-import datetime as dt
 import errno
 import fcntl
 import os
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import duckdb
 import pandas as pd
 
 from trend_hunter.core.types import Health, HealthState
-
 
 # ── schema (one migration = one ordered number) ────────────────────────────
 # NOTE on column names: DuckDB reserves some tokens for time-travel queries
@@ -228,7 +226,7 @@ class DuckDBStorage:
         c = self.conn()
         rel = c.execute(sql, list(params) if params else [])
         cols = [d[0] for d in rel.description]
-        return [dict(zip(cols, row)) for row in rel.fetchall()]
+        return [dict(zip(cols, row, strict=False)) for row in rel.fetchall()]
 
     def execute(self, sql: str, params: tuple = ()) -> None:
         c = self.conn()
@@ -269,7 +267,7 @@ class DuckDBStorage:
                 self._lock_fh.close()
             self._lock_fh = None
 
-    def __enter__(self) -> "DuckDBStorage":
+    def __enter__(self) -> DuckDBStorage:
         return self
 
     def __exit__(self, *_exc: object) -> None:

@@ -28,7 +28,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-
 VALIDATED_DAYS_THRESHOLD = 30        # ≥ 30 days running ⇒ validated profit
 _REQUIRED_KEYS = ("creative_url", "advertiser", "niche", "days_running")
 

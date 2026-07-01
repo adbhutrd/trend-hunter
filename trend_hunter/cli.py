@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from datetime import UTC
 
 from trend_hunter.core.config import get_settings
 from trend_hunter.core.logging import configure, get
@@ -48,8 +49,8 @@ def _cmd_scan(_args: argparse.Namespace) -> None:
 def _cmd_run(_args: argparse.Namespace) -> None:
     """scan + classify + aggregate + doctor — single writer session + read-only doctor."""
     log = get()
-    from trend_hunter.intelligence.aggregator import aggregate, classify_all
     from trend_hunter.ingest.runner import run_once
+    from trend_hunter.intelligence.aggregator import aggregate, classify_all
     from trend_hunter.scripts.doctor import doctor
 
     with _open_writer() as storage:
@@ -78,11 +79,12 @@ def _cmd_doctor(_args: argparse.Namespace) -> None:
 
 # ── Phase 3: forecast / arbitrage / ads / scaffold / money-sweep ──────────────
 def _cmd_forecast(_args: argparse.Namespace) -> None:
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
+
     from trend_hunter.adapters.forecaster_baseline import BaselineForecaster
 
     fc = BaselineForecaster()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     history = [(now - timedelta(days=6 - i), 10.0 + 1.5 * i) for i in range(7)]
     out = fc.fit_predict(history, horizon_days=14)
     print(
@@ -93,6 +95,7 @@ def _cmd_forecast(_args: argparse.Namespace) -> None:
 
 def _cmd_arbitrage(_args: argparse.Namespace) -> None:
     from pathlib import Path
+
     from trend_hunter.adapters.supplier_catalog import CsvCatalogSupplier, MockSupplier
     from trend_hunter.money.arbitrage import scan, summary
 
@@ -123,6 +126,7 @@ def _cmd_validate_ads(_args: argparse.Namespace) -> None:
 
 def _cmd_scaffold(args: argparse.Namespace) -> None:
     from pathlib import Path
+
     from trend_hunter.adapters.supplier_catalog import CsvCatalogSupplier, MockSupplier
     from trend_hunter.money.arbitrage import scan
     from trend_hunter.money.scaffold_pipeline import scaffold
@@ -142,6 +146,7 @@ def _cmd_scaffold(args: argparse.Namespace) -> None:
 
 def _cmd_money_sweep(args: argparse.Namespace) -> None:
     from pathlib import Path
+
     from trend_hunter.adapters.supplier_catalog import CsvCatalogSupplier, MockSupplier
     from trend_hunter.money.arbitrage import scan, summary
     from trend_hunter.money.scaffold_pipeline import scaffold

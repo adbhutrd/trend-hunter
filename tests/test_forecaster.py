@@ -1,14 +1,14 @@
 """Unit tests for BaselineForecaster."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from trend_hunter.adapters.forecaster_baseline import BaselineForecaster
 from trend_hunter.core.types import Health  # noqa: F401  (sanity import)
 
 
 def _ts(days_ago: float) -> datetime:
-    return datetime.now(timezone.utc) - timedelta(days=days_ago)
+    return datetime.now(UTC) - timedelta(days=days_ago)
 
 
 def test_forecast_returns_zero_when_too_few_points():

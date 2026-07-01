@@ -1,11 +1,9 @@
 """Unit tests for the ArbitrageScanner math + supplier matching."""
 from __future__ import annotations
 
-from pathlib import Path
-
-from trend_hunter.adapters.supplier_catalog import MockSupplier, CsvCatalogSupplier
-from trend_hunter.money.arbitrage import _shipping_cost, _cac_estimate, _to_money_row, scan, summary
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
+from trend_hunter.adapters.supplier_catalog import CsvCatalogSupplier, MockSupplier
+from trend_hunter.money.arbitrage import _cac_estimate, _shipping_cost, _to_money_row, scan, summary
 
 
 def test_shipping_cost_by_region():

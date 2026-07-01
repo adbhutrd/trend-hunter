@@ -7,18 +7,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 
 # ── enums ────────────────────────────────────────────────────────────────────
-class TrendStatus(str, Enum):
+class TrendStatus(StrEnum):
     RISING = "rising"
     DECLINING = "declining"
     STABLE = "stable"
     UNKNOWN = "unknown"
 
 
-class HealthState(str, Enum):
+class HealthState(StrEnum):
     OK = "ok"
     STALE = "stale"
     FAILING = "failing"
