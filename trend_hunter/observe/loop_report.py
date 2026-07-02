@@ -25,6 +25,8 @@ from trend_hunter.observe.run_ledger import recent_runs
 def _format_age(ts) -> str:                                                   # noqa: ANN001
     if ts is None:
         return "—"
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
     delta = datetime.now(UTC) - ts
     s = int(delta.total_seconds())
     if s < 60:
@@ -65,7 +67,7 @@ def _success_rate(rows: list[dict]) -> float:
 def render(storage: DuckDBStorage, days: int = 7) -> str:
     rows_7d = recent_runs(storage, days=days)
     rows_prev = recent_runs(storage, days=days * 2) if days > 0 else []
-    cutoff = datetime.now(UTC) - timedelta(days=days)
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).replace(tzinfo=None)
     prev_window = [r for r in rows_prev
                    if r.get("started_at") and r["started_at"] < cutoff]
 
