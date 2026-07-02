@@ -10,12 +10,14 @@ Usage
     python -m trend_hunter.cli validate-ads                # list ads ≥ 30 days
     python -m trend_hunter.cli scaffold --top 3 --live     # draft + push (dry-run by default)
     python -m trend_hunter.cli money-sweep --top 3         # arbitrage + scaffold end-to-end
+    python -m trend_hunter.cli calibrate                   # forecast back-testing + MAPE
     python -m trend_hunter.cli schedule                    # start APScheduler
     python -m trend_hunter.cli dashboard
     python -m trend_hunter.cli stats
     python -m trend_hunter.cli doctor
     python -m trend_hunter.cli forget <email>
-    python -m trend_hunter.cli loop-report                 # 7d feed-back loop summary
+    python -m trend_hunter.cli loop-report                 # 7d feedback-loop summary
+    python -m trend_hunter.cli alert                       # push notifications if degradation
 """
 from __future__ import annotations
 
@@ -43,7 +45,7 @@ def _open_reader():
 # ── ingest / aggregate ────────────────────────────────────────────────────────
 def _cmd_scan(_args: argparse.Namespace) -> None:
     from trend_hunter.ingest.runner import run_once
-    with _open_writer() as storage, record_run("scan") as rec:
+    with _open_writer() as storage, record_run("scan", storage=storage) as rec:
         summary = asyncio.run(run_once(storage))
         rec.set_counters({"products_in": int(summary.get("total", 0))})
     get().info(f"scan summary: {summary}")
@@ -56,7 +58,7 @@ def _cmd_run(_args: argparse.Namespace) -> None:
     from trend_hunter.scripts.doctor import doctor
 
     log = get()
-    with _open_writer() as storage, record_run("run") as rec:
+    with _open_writer() as storage, record_run("run", storage=storage) as rec:
         scan_summary = asyncio.run(run_once(storage))
         log.info(f"scan summary: {scan_summary}")
         agg = aggregate(storage)
@@ -73,7 +75,7 @@ def _cmd_run(_args: argparse.Namespace) -> None:
 
 def _cmd_aggregate(_args: argparse.Namespace) -> None:
     from trend_hunter.intelligence.aggregator import aggregate, classify_all
-    with _open_writer() as storage, record_run("aggregate") as rec:
+    with _open_writer() as storage, record_run("aggregate", storage=storage) as rec:
         out = aggregate(storage)
         n = classify_all(storage)
         rec.set_counters({"classified": int(n)})
@@ -85,11 +87,12 @@ def _cmd_doctor(_args: argparse.Namespace) -> None:
     sys.exit(doctor())
 
 
-# ── Phase 3: forecast / arbitrage / ads / scaffold / money-sweep ──────────────
+# ── Phase 3: forecast / arbitrage / ads / scaffold / money-sweep / calibrate ──
 def _cmd_forecast(_args: argparse.Namespace) -> None:
     from datetime import datetime, timedelta
 
     from trend_hunter.adapters.forecaster_baseline import BaselineForecaster
+    from trend_hunter.observe.calibrate import record_calibration
 
     fc = BaselineForecaster()
     now = datetime.now(__import__("datetime").UTC)
@@ -100,12 +103,23 @@ def _cmd_forecast(_args: argparse.Namespace) -> None:
         f"CI[{out.lower_80:.2f}, {out.upper_80:.2f}] conf={out.confidence:.2f}"
     )
 
+    # Record calibration for this forecast (actual will be filled in later).
+    with _open_writer() as storage:
+        cid = record_calibration(
+            storage,
+            sku="forecast-smoke",
+            predicted_price=out.point_estimate,
+            horizon_days=14,
+            source_command="forecast",
+        )
+        print(f"  calibration_id={cid} (update with `cli calibrate update <id> <actual_price>`)")
+
 
 def _cmd_arbitrage(_args: argparse.Namespace) -> None:
     from trend_hunter.adapters.supplier_catalog import CsvCatalogSupplier, MockSupplier
     from trend_hunter.money.arbitrage import scan, summary
 
-    with _open_writer() as storage, record_run("arbitrage") as rec:
+    with _open_writer() as storage, record_run("arbitrage", storage=storage) as rec:
         cat = CsvCatalogSupplier(Path("./data/suppliers.csv"))
         rows = scan(storage, cat if cat._items else MockSupplier())    # type: ignore[arg-type]
         rec.set_counters({"money_rows": summary(rows)["count"]})
@@ -114,7 +128,7 @@ def _cmd_arbitrage(_args: argparse.Namespace) -> None:
     for r in rows[:10]:
         print(
             f"    {r.sku:40} retail=${r.retail_price:6.2f} "
-            f"cost=${r.supplier_cost:5.2f} margin={r.margin_pct*100:5.1f}% "
+            f"cost=${r.supplier_cost:5.2f} margin={r.margin_pct * 100:5.1f}% "
             f"via {r.supplier_name}"
         )
 
@@ -122,7 +136,7 @@ def _cmd_arbitrage(_args: argparse.Namespace) -> None:
 def _cmd_validate_ads(_args: argparse.Namespace) -> None:
     from trend_hunter.adapters.ads_validator import AdsValidator
 
-    with _open_writer(), record_run("validate-ads") as rec:
+    with _open_writer() as storage, record_run("validate-ads", storage=storage) as rec:
         v = AdsValidator()
         validated = v.validated()
         rec.set_counters({"validated": len(validated)})
@@ -144,7 +158,7 @@ def _cmd_scaffold(args: argparse.Namespace) -> None:
 
     live = bool(args.live)
     top = int(args.top)
-    with _open_writer() as storage, record_run("scaffold") as rec:
+    with _open_writer() as storage, record_run("scaffold", storage=storage) as rec:
         cat = CsvCatalogSupplier(Path("./data/suppliers.csv"))
         rows = scan(storage, cat if cat._items else MockSupplier())    # type: ignore[arg-type]
         out = scaffold(rows, top=top, dry_run=not live)
@@ -170,7 +184,7 @@ def _cmd_money_sweep(args: argparse.Namespace) -> None:
 
     live = bool(args.live)
     top = int(args.top)
-    with _open_writer() as storage, record_run("money-sweep") as rec:
+    with _open_writer() as storage, record_run("money-sweep", storage=storage) as rec:
         cat = CsvCatalogSupplier(Path("./data/suppliers.csv"))
         supplier = cat if cat._items else MockSupplier()              # type: ignore[assignment]
         rows = scan(storage, supplier)
@@ -185,7 +199,108 @@ def _cmd_money_sweep(args: argparse.Namespace) -> None:
     for r in out:
         print(f"    {r.get('status'):12} sku={r.get('sku')}")
 
+    # ── Run chaining: after money-sweep, auto-run loop-report + check alerts ──
+    _chain_loop_report()
+    _chain_alerts()
 
+
+def _cmd_calibrate(args: argparse.Namespace) -> None:
+    """Calibrate subcommand — forecast back-testing, MAPE reporting, etc.
+
+    Sub-subcommands::
+
+        calibrate list [--days 30]          # pending forecasts awaiting actuals
+        calibrate update <id> <actual>      # fill in the realised price
+        calibrate summary [--days 7]        # MAPE + MAE for resolved forecasts
+    """
+    # Ensure the calibrate table exists (open writer briefly).
+    with _open_writer():
+        pass
+
+    sub = args.calibrate_cmd or "summary"
+    with _open_reader() as storage:
+        if sub == "list":
+            from trend_hunter.observe.calibrate import pending_calibrations
+            rows = pending_calibrations(storage, days=int(args.days))
+            if rows:
+                print(f"  pending calibrations ({len(rows)}):")
+                for r in rows:
+                    print(
+                        f"    {r['calibrate_id'][:8]} sku={r['sku']:20} "
+                        f"predicted=${r['predicted_price']:6.2f} "
+                        f"horizon={r['horizon_days']}d "
+                        f"via {r['source_command'] or '?'}"
+                    )
+            else:
+                print("  (no pending calibrations — forecasts get actuals quickly)")
+        elif sub == "update":
+            from trend_hunter.observe.calibrate import update_actual
+            if not args.calibrate_id or args.actual_price is None:
+                print("usage: calibrate update <calibrate_id> <actual_price>")
+                return
+            with _open_writer() as storage_w:
+                update_actual(storage_w, args.calibrate_id, float(args.actual_price))
+            print(f"  calibration {args.calibrate_id[:8]} updated: actual=${float(args.actual_price):.2f}")
+        else:
+            from trend_hunter.observe.calibrate import calibration_summary
+            cal = calibration_summary(storage, days=int(args.days))
+            if cal["count"]:
+                print(f"  calibration summary (last {args.days}d):")
+                print(f"    resolved forecasts = {cal['count']}")
+                print(f"    MAPE               = {cal['mape_pct']:.2f}%")
+                if cal["mean_abs_error"] is not None:
+                    print(f"    mean abs error     = ${cal['mean_abs_error']:.2f}")
+            else:
+                print(f"  (no resolved calibrations in the last {args.days} days)")
+
+
+def _cmd_alert(_args: argparse.Namespace) -> None:
+    """Check every core command's 1-day success rate; alert on degradation."""
+    from trend_hunter.observe.alerts import alert_on_degradation
+
+    with _open_reader() as storage:
+        offenders = alert_on_degradation(storage)
+    if offenders:
+        print("  alerts sent for degraded commands:")
+        for o in offenders:
+            print(f"    ⚠️  {o['command']:14} rate={o['rate'] * 100:.0f}%")
+    else:
+        print("  all core commands healthy (no alerts sent)")
+
+
+# ── run chaining helpers ─────────────────────────────────────────────────────
+def _chain_loop_report() -> None:
+    """Auto-run loop-report after money-sweep."""
+    try:
+        from trend_hunter.observe.loop_report import render
+
+        storage = _open_reader()
+        try:
+            get().info("run-chaining: loop-report")
+            print(render(storage, days=7))
+        finally:
+            storage.close()
+    except Exception as exc:                                                    # noqa: BLE001
+        get().warning("run-chaining: loop-report failed: %s", exc)
+
+
+def _chain_alerts() -> None:
+    """Auto-check success rates and push alerts if degradation detected."""
+    try:
+        from trend_hunter.observe.alerts import alert_on_degradation
+
+        with _open_reader() as storage:
+            offenders = alert_on_degradation(storage)
+        if offenders:
+            get().warning(
+                "run-chaining: %d degraded command(s) alerted",
+                len(offenders),
+            )
+    except Exception as exc:                                                    # noqa: BLE001
+        get().warning("run-chaining: alerts failed: %s", exc)
+
+
+# ── ops / UI ──────────────────────────────────────────────────────────────────
 def _cmd_schedule(_args: argparse.Namespace) -> None:
     from trend_hunter.flows.daily import start
     sched = start()
@@ -197,7 +312,6 @@ def _cmd_schedule(_args: argparse.Namespace) -> None:
         sched.shutdown(wait=False)
 
 
-# ── ops / UI ──────────────────────────────────────────────────────────────────
 def _cmd_dashboard(_args: argparse.Namespace) -> None:
     import subprocess
     port = get_settings().dash_port
@@ -232,12 +346,13 @@ def _cmd_migrate(_args: argparse.Namespace) -> None:
 def _cmd_stats(_args: argparse.Namespace) -> None:
     with _open_reader() as storage:
         for table in ("products", "leads", "money", "rop_audit",
-                      "health", "forecasts", "run_history"):
+                      "health", "forecasts", "run_history",
+                      "calibrate", "corrective_actions"):
             try:
                 n = storage.query(f"SELECT count(*) AS n FROM {table}")[0]["n"]
             except Exception:
                 n = "?"
-            print(f"  {table:14}  {n}")
+            print(f"  {table:20}  {n}")
 
 
 def _cmd_forget(args: argparse.Namespace) -> None:
@@ -245,7 +360,7 @@ def _cmd_forget(args: argparse.Namespace) -> None:
     import hashlib
     subject_email = args.email
     subject_hash = hashlib.sha256(subject_email.encode()).hexdigest()[:16]
-    with _open_writer() as storage, record_run("forget", dedupe_key=subject_hash) as rec:
+    with _open_writer() as storage, record_run("forget", storage=storage, dedupe_key=subject_hash) as rec:
         before = storage.query(
             "SELECT count(*) AS n FROM leads WHERE contact_email = ?",
             (subject_email,),
@@ -278,6 +393,9 @@ def _cmd_loop_report(args: argparse.Namespace) -> None:
     with _open_reader() as storage:
         print(render(storage, days=days))
 
+    # Run chaining: check alerts after loop-report
+    _chain_alerts()
+
 
 # ── parser ────────────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
@@ -288,7 +406,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("scan", help="ingest from all enabled sources (once)").set_defaults(func=_cmd_scan)
-    sub.add_parser("forecast", help="quick smoke-test of BaselineForecaster").set_defaults(func=_cmd_forecast)
+    sub.add_parser("forecast", help="quick smoke-test of BaselineForecaster + calibration record").set_defaults(func=_cmd_forecast)
     rp = sub.add_parser("run", help="scan + classify + aggregate + doctor")
     rp.set_defaults(func=_cmd_run)
     sub.add_parser("aggregate", help="build dashboard roll-ups").set_defaults(func=_cmd_aggregate)
@@ -316,6 +434,22 @@ def build_parser() -> argparse.ArgumentParser:
     msp.add_argument("--top", type=int, default=3)
     msp.add_argument("--live", action="store_true")
     msp.set_defaults(func=_cmd_money_sweep)
+
+    # ── calibrate ────────────────────────────────────────────────────────────
+    calp = sub.add_parser("calibrate", help="forecast back-testing and MAPE reporting")
+    calp.add_argument(
+        "calibrate_cmd", nargs="?",
+        choices=("list", "update", "summary"), default="summary",
+        help="list pending, update actual, or show MAPE summary",
+    )
+    calp.add_argument("--days", type=int, default=7, help="lookback window (default 7)")
+    calp.add_argument("calibrate_id", nargs="?", help="calibrate_id for 'update' subcommand")
+    calp.add_argument("actual_price", nargs="?", type=float, help="actual price for 'update' subcommand")
+    calp.set_defaults(func=_cmd_calibrate)
+
+    # ── alert ────────────────────────────────────────────────────────────────
+    alrtp = sub.add_parser("alert", help="check success rates and push notifications")
+    alrtp.set_defaults(func=_cmd_alert)
 
     fp = sub.add_parser("forget", help="GDPR Art. 17 right-to-erasure")
     fp.add_argument("email")

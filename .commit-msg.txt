@@ -1,0 +1,10 @@
+feat(observe): alerts, calibrate, corrective_actions — feedback loop complete
+
+- observe/alerts.py: Discord + Telegram push notifications on degradation
+- observe/calibrate.py: forecast back-test recorder + MAPE + CLI
+- observe/corrective_actions.py: auto-playbook recorder, triggered on degradation
+- observe/constants.py: shared CORE_COMMANDS/COUNTER_KEYS, no circular imports
+- tests: test_alerts.py, test_calibrate.py, test_corrective_actions.py (30 new tests)
+- fix: removed PID-stamping from writer lock (FCNTL auto-released by kernel)
+- fix: double-writer-lock bug — pass storage= to record_run in all 8 compound withs
+- fix: test_forget isolated to tmp_path DuckDB to avoid cross-test lock contention

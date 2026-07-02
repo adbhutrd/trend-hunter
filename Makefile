@@ -10,7 +10,7 @@ PIP        := $(VENV)/bin/pip
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init install run scan doctor aggregate backup dashboard test lint clean money money-cycle forecast arbitrage scaffold ads loop-report migrate docs
+.PHONY: help init install run scan doctor aggregate backup dashboard test lint clean money money-cycle forecast arbitrage scaffold ads loop-report migrate calibrate alert docs
 
 help: ## show this help
 	@awk 'BEGIN {FS = ":.*?## "; printf "Usage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} \
@@ -68,6 +68,15 @@ migrate: ## apply pending schema migrations (open writer briefly; safe to re-run
 
 loop-report: migrate ## apply migrations then dump 7-day feedback summary from run_history
 	$(VENV_PY) -m trend_hunter.cli loop-report --days 7
+
+calibrate: migrate ## forecast back-testing MAPE summary
+	$(VENV_PY) -m trend_hunter.cli calibrate summary --days 7
+
+calibrate-list: migrate ## list pending calibrations awaiting actual prices
+	$(VENV_PY) -m trend_hunter.cli calibrate list --days 30
+
+alert: ## check success rates and push notifications if degraded
+	$(VENV_PY) -m trend_hunter.cli alert
 
 schedule: ## start APScheduler (foreground; systemd-friendly)
 	$(VENV_PY) -m trend_hunter.cli schedule

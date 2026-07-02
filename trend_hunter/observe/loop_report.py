@@ -1,4 +1,4 @@
-"""``loop-report`` — surface the systems state through one ``run_history`` table.
+"""``loop-report`` — surface the system's state through one ``run_history`` table.
 
 Prints:
 
@@ -6,8 +6,10 @@ Prints:
 * 7-day throughput per command + success rate
 * 7-day totals for ingest-shaped counters (``products_in``,
   ``classified``, ``money_rows``, ``scaffolded``, ``audits``)
+* **calibration MAPE** — forecast accuracy from the ``calibrate`` table
+* **corrective actions** — auto-playbook summary from ``corrective_actions``
 * dollars-on-track: 7-day mean ``retail_price * margin_pct`` from ``money``
-* "delta vs prior 7d" so drift is visible at a glance
+* delta vs prior 7d so drift is visible at a glance
 """
 from __future__ import annotations
 
@@ -16,22 +18,11 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
+from trend_hunter.observe.constants import CORE_COMMANDS, COUNTER_KEYS
 from trend_hunter.observe.run_ledger import recent_runs
 
-# Commands the report treats as "core" — others go in the bottom panel.
-CORE_COMMANDS = (
-    "scan", "run", "aggregate", "arbitrage", "scaffold",
-    "money-sweep", "forget", "validate-ads",
-)
 
-# Counters the report reads from the ``counters`` JSON column.
-COUNTER_KEYS = (
-    "products_in", "classified", "leads_added",
-    "money_rows", "scaffolded", "audits", "validated",
-)
-
-
-def _format_age(ts) -> str:                                                  # noqa: ANN001
+def _format_age(ts) -> str:                                                   # noqa: ANN001
     if ts is None:
         return "—"
     delta = datetime.now(UTC) - ts
@@ -122,7 +113,7 @@ def render(storage: DuckDBStorage, days: int = 7) -> str:
         rc_p = _success_rate(prv)
         out.append(
             f"    {cmd:14} runs {cur_n:>4} {sign} {prv_n:<4} "
-            f"succ {rc*100:5.1f}% (was {rc_p*100:5.1f}%)",
+            f"succ {rc * 100:5.1f}% (was {rc_p * 100:5.1f}%)",
         )
     if not any_rows:
         out.append("    (no runs recorded for any core command yet)")
@@ -140,7 +131,58 @@ def render(storage: DuckDBStorage, days: int = 7) -> str:
         out.append("    (no counters written yet — `make run` to populate)")
     out.append("")
 
-    # ── 4) Dollars on track ──────────────────────────────────────────────────
+    # ── 4) Calibration MAPE ──────────────────────────────────────────────────
+    out.append(f"▸ forecast calibration (MAPE) — last {days} days")
+    try:
+        cal = storage.query(
+            f"""
+            SELECT count(*) AS n,
+                   avg(abs(error_pct)) * 100 AS mape_pct,
+                   avg(abs(actual_price - predicted_price)) AS mae
+            FROM calibrate
+            WHERE actual_price IS NOT NULL
+              AND ts_forecast >= now() - INTERVAL {int(days)} DAY
+            """,
+        )
+        if cal and cal[0]["n"] and cal[0]["n"] > 0:
+            out.append(f"    calibrations        = {int(cal[0]['n'])}")
+            out.append(f"    MAPE                = {float(cal[0]['mape_pct']):.2f}%")
+            out.append(f"    mean abs error (MAE)= ${float(cal[0]['mae']):.2f}")
+        else:
+            out.append("    (no resolved calibrations yet — `make calibrate` to seed)")
+    except Exception as e:                                                      # noqa: BLE001
+        out.append(f"    skipped ({type(e).__name__})")
+    out.append("")
+
+    # ── 5) Corrective actions ─────────────────────────────────────────────────
+    out.append(f"▸ corrective actions — last {days} days")
+    try:
+        acts = storage.query(
+            f"""
+            SELECT trigger_cmd, outcome, count(*) AS n
+            FROM corrective_actions
+            WHERE created_at >= now() - INTERVAL {int(days)} DAY
+            GROUP BY trigger_cmd, outcome
+            ORDER BY trigger_cmd, outcome
+            """,
+        )
+        pending = [r for r in acts if r["outcome"] == "pending"]
+        resolved = [r for r in acts if r["outcome"] in ("resolved", "fixed")]
+        failed = [r for r in acts if r["outcome"] in ("failed", "skipped")]
+        if acts:
+            for r in acts:
+                out.append(f"    {r['trigger_cmd']:14} → {r['outcome']:10} ({int(r['n'])}x)")
+            out.append(
+                f"    {'':14}   {len(pending)} pending, "
+                f"{len(resolved)} resolved, {len(failed)} failed",
+            )
+        else:
+            out.append("    (no corrective actions recorded yet)")
+    except Exception as e:                                                      # noqa: BLE001
+        out.append(f"    skipped ({type(e).__name__})")
+    out.append("")
+
+    # ── 6) Dollars on track ──────────────────────────────────────────────────
     try:
         margin_rows = storage.query(
             f"""
@@ -149,7 +191,6 @@ def render(storage: DuckDBStorage, days: int = 7) -> str:
             FROM money
             WHERE recorded_at >= now() - INTERVAL {int(days)} DAY
             """,
-            (),
         )
         if margin_rows and margin_rows[0]["track_dollars"] is not None:
             out.append(f"▸ dollars on track (money table, last {days} days)")
@@ -161,7 +202,7 @@ def render(storage: DuckDBStorage, days: int = 7) -> str:
                 f"    avg margin          = "
                 f"{margin_rows[0]['avg_margin'] * 100:.1f}%",
             )
-    except Exception as e:                                                    # noqa: BLE001
+    except Exception as e:                                                      # noqa: BLE001
         out.append(f"▸ dollars on track: skipped ({type(e).__name__})")
 
     out.append("")
@@ -180,7 +221,7 @@ def day_buckets(rows: list[dict]) -> dict[str, int]:
         if ts is None:
             continue
         try:
-            out[ts.strftime("%Y-%m-%d")] += 1  # type: ignore[union-attr]
+            out[ts.strftime("%Y-%m-%d")] += 1                                   # type: ignore[union-attr]
         except AttributeError:
             continue
     return dict(out)
