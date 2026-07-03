@@ -41,7 +41,7 @@ upsert_env() {
 echo -e "${BOLD}▸ Validating token via getMe...${NC}"
 # Capture only stdout; stderr (any curl errors) goes to terminal directly so the
 # token is never echoed back via error capture.
-ME_JSON=$(curl -fsS "https://api.telegram.org/bot${TOKEN}/getMe") || {
+ME_JSON=$(curl -fsS --max-time 15 "https://api.telegram.org/bot${TOKEN}/getMe") || {
     echo -e "${RED}✗ getMe failed — invalid token or network issue${NC}" >&2
     exit 1
 }
@@ -56,7 +56,7 @@ echo -e "  ${GREEN}✓${NC} Bot: @$BOT_NAME"
 
 # ── step 2: extract chat_id from getUpdates ───────────────────────────────────
 echo -e "${BOLD}▸ Polling getUpdates for chat_id...${NC}"
-UPD_JSON=$(curl -fsS "https://api.telegram.org/bot${TOKEN}/getUpdates") || {
+UPD_JSON=$(curl -fsS --max-time 15 "https://api.telegram.org/bot${TOKEN}/getUpdates") || {
     echo -e "${RED}✗ getUpdates failed${NC}" >&2; exit 1
 }
 
@@ -67,28 +67,21 @@ if grep -qE "^[[:space:]]*(export[[:space:]]+)?TH_TELEGRAM_CHAT_ID=" "$ENV_FILE"
     EXISTING_CHAT_ID=$(sed -nE "s#^[[:space:]]*(export[[:space:]]+)?TH_TELEGRAM_CHAT_ID=##p" "$ENV_FILE" | head -1 | tr -d '[:space:]')
 fi
 
-CHAT_ID=$(EXISTING="$EXISTING_CHAT_ID" python3 -c "
+CHAT_ID=$(EXISTING="$EXISTING_CHAT_ID" PYTHONPATH="$PROJECT_DIR" python3 -c "
 import os, sys, json
+from trend_hunter.observe.telegram_chat import (
+    extract_chat_id, TelegramAPIError, NoPrivateMessageError,
+)
+
 data = json.load(sys.stdin)
-if not data.get('ok'):
-    sys.stderr.write('API error: ' + data.get('description', '') + '\n'); sys.exit(3)
-updates = data.get('result', []) or []
 existing = os.environ.get('EXISTING', '').strip()
-# Prefer the existing chat_id if it's already present in the update stream.
-for u in updates:
-    msg = u.get('message') or u.get('channel_post') or {}
-    chat = msg.get('chat') or {}
-    if existing and str(chat.get('id', '')) == existing:
-        print(existing); sys.exit(0)
-# Otherwise pick the latest private chat from a non-bot user.
-for u in reversed(updates):
-    msg = u.get('message') or {}
-    if (msg.get('from') or {}).get('is_bot'):
-        continue
-    chat = msg.get('chat') or {}
-    if chat.get('type') == 'private':
-        print(chat['id']); sys.exit(0)
-sys.stderr.write('NO_PRIVATE_USER_MSG\n'); sys.exit(4)
+
+try:
+    print(extract_chat_id(data, existing))
+except TelegramAPIError as exc:
+    sys.stderr.write(str(exc) + '\n'); sys.exit(3)
+except NoPrivateMessageError:
+    sys.stderr.write('NO_PRIVATE_USER_MSG\n'); sys.exit(4)
 ") || {
     rc=$?
     if [ "$rc" -eq 4 ]; then
