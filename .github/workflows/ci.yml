@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint + test (Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check trend_hunter tests scripts
+
+      # TODO: enable `ruff format --check` here once we've run `ruff format`
+      #       across the codebase. ~48 files (incl. Streamlit pages with
+      #       emoji filenames) are still pre-format. Disable for now to keep
+      #       CI green on first push.
+      # - name: Lint format (ruff format --check)
+      #   run: ruff format --check trend_hunter tests scripts
+
+      - name: Test (pytest)
+        run: |
+          mkdir -p data/logs
+          pytest -q --tb=short
+
+      - name: Build sdist + wheel (sanity, main-only)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          pip install build
+          python -m build --sdist --wheel --outdir /tmp/dist
