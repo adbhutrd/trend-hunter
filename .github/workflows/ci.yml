@@ -34,12 +34,10 @@ jobs:
       - name: Lint (ruff)
         run: ruff check trend_hunter tests scripts
 
-      # TODO: enable `ruff format --check` here once we've run `ruff format`
-      #       across the codebase. ~48 files (incl. Streamlit pages with
-      #       emoji filenames) are still pre-format. Disable for now to keep
-      #       CI green on first push.
-      # - name: Lint format (ruff format --check)
-      #   run: ruff format --check trend_hunter tests scripts
+      # Bulk format applied in commit `63d786a` — 48 files normalized,
+      # 12 already formatted. Now enforce no further drift in CI.
+      - name: Lint format (ruff format --check)
+        run: ruff format --check trend_hunter tests scripts
 
       - name: Test (pytest)
         run: |
