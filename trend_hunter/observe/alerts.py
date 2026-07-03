@@ -18,6 +18,16 @@ from typing import Any
 
 from trend_hunter.observe.run_ledger import success_rate
 
+# ── HTTP client timeouts ──────────────────────────────────────────────────────
+# Plain ``timeout=10`` only bounds the *read* phase; the OS default TCP
+# connect timeout is ~75 s on Linux, so a hung socket would freeze the
+# release of new alert emissions for the entire feedback loop.  A tuple
+# ``(connect, read)`` is supported on ``urlopen`` from Python 3.10 onwards;
+# we target 3.12 so we can lean on it.  Cap connect time hard since a
+# healthy hostname reaches us in <2 s and any longer means trouble somewhere.
+CONNECT_TIMEOUT_S = 5
+READ_TIMEOUT_S = 10
+
 
 # ── dispatcher ────────────────────────────────────────────────────────────────
 def _send_discord(webhook: str, message: str) -> None:
@@ -29,7 +39,9 @@ def _send_discord(webhook: str, message: str) -> None:
         method="POST",
     )
     try:
-        urllib.request.urlopen(req, timeout=10)
+        urllib.request.urlopen(
+            req, timeout=(CONNECT_TIMEOUT_S, READ_TIMEOUT_S),
+        )
     except Exception as exc:                                                    # noqa: BLE001
         from trend_hunter.core.logging import get
 
@@ -46,7 +58,9 @@ def _send_telegram(token: str, chat_id: str, message: str) -> None:
         method="POST",
     )
     try:
-        urllib.request.urlopen(req, timeout=10)
+        urllib.request.urlopen(
+            req, timeout=(CONNECT_TIMEOUT_S, READ_TIMEOUT_S),
+        )
     except Exception as exc:                                                    # noqa: BLE001
         from trend_hunter.core.logging import get
 
