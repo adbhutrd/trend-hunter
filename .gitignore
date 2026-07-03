@@ -24,6 +24,11 @@ venv/
 .ruff_cache/
 .pytest_cache/
 
+# coverage output (pytest-cov writes .coverage; htmlcov/ is `coverage html`)
+.coverage
+.coverage.*
+htmlcov/
+
 # secrets
 .env
 .streamlit/secrets.toml
