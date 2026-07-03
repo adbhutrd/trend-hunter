@@ -9,6 +9,7 @@ Design points (religiously):
 * `query()` returns list[dict] so the protocol stays mapping-friendly
 * Aggregation tables live in same DB so dashboard reads are zero-DSP
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -28,7 +29,9 @@ from trend_hunter.core.types import Health, HealthState
 # (e.g. `AT (VERSION => ...)`), so we use `recorded_at` instead of `at`
 # for the audit log. Don't rename to `at` without a quick smoke test.
 _MIGRATIONS: list[tuple[int, str]] = [
-    (1, """
+    (
+        1,
+        """
         CREATE TABLE IF NOT EXISTS products (
             source        TEXT NOT NULL,
             external_id   TEXT NOT NULL,
@@ -102,8 +105,11 @@ _MIGRATIONS: list[tuple[int, str]] = [
             captured_at    TIMESTAMP NOT NULL,
             PRIMARY KEY (sku, captured_at)
         );
-    """),
-    (2, """
+    """,
+    ),
+    (
+        2,
+        """
         -- Migration #2: run history (loop-engineering feedback spine).
         -- Every CLI invocation writes one row so we can compute
         -- success rates, throughput, payload drift over time.
@@ -131,8 +137,11 @@ _MIGRATIONS: list[tuple[int, str]] = [
             ON run_history(started_at);
         CREATE INDEX IF NOT EXISTS idx_run_history_command
             ON run_history(command);
-    """),
-    (3, """
+    """,
+    ),
+    (
+        3,
+        """
         -- Migration #3: calibration records (forecast back-testing).
         -- Stores predicted-vs-actual pairs so the calibrate leg can compute
         -- MAPE (Mean Absolute Percentage Error) and auto-tune margins.
@@ -153,8 +162,11 @@ _MIGRATIONS: list[tuple[int, str]] = [
             ON calibrate(sku);
         CREATE INDEX IF NOT EXISTS idx_calibrate_ts_forecast
             ON calibrate(ts_forecast);
-    """),
-    (4, """
+    """,
+    ),
+    (
+        4,
+        """
         -- Migration #4: corrective actions (auto-playbook).
         -- Each row records an action the system auto-triggered when
         -- loop-report detected a degradation (e.g. "scaffold success < 30%").
@@ -174,7 +186,8 @@ _MIGRATIONS: list[tuple[int, str]] = [
             ON corrective_actions(trigger_cmd, created_at);
         CREATE INDEX IF NOT EXISTS idx_corrective_outcome
             ON corrective_actions(outcome);
-    """),
+    """,
+    ),
 ]
 
 
@@ -297,11 +310,15 @@ class DuckDBStorage:
     # ── cached column introspection to avoid extra round-trips ───────────────
     def _columns(self, table: str) -> list[str]:
         if table not in self._col_cache:
-            rows = self.conn().execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name = ? ORDER BY ordinal_position",
-                [table],
-            ).fetchall()
+            rows = (
+                self.conn()
+                .execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = ? ORDER BY ordinal_position",
+                    [table],
+                )
+                .fetchall()
+            )
             self._col_cache[table] = [r[0] for r in rows]
         return self._col_cache[table]
 

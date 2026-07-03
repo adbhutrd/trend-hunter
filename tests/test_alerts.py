@@ -3,6 +3,7 @@
 Uses the shared ``storage`` fixture so tests share the same FCNTL-lock
 contract as every other write-path test.
 """
+
 from __future__ import annotations
 
 import time

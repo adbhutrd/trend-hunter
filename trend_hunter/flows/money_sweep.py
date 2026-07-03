@@ -2,6 +2,7 @@
 
 Wraps the relevant pieces so a single `make money` runs everything end-to-end.
 """
+
 from __future__ import annotations
 
 from loguru import logger
@@ -22,11 +23,12 @@ def run(
 ) -> dict:
     """Run arbitrage scan + scaffold the top-N profitable matches."""
     from pathlib import Path as _P
+
     path = _P(catalog_path)
     supplier = CsvCatalogSupplier(path)
     if not supplier._items and use_mock_if_missing:
         logger.warning(f"money sweep: no suppliers at {path}, falling back to MockSupplier")
-        supplier = MockSupplier()                                  # type: ignore[assignment]
+        supplier = MockSupplier()  # type: ignore[assignment]
 
     rows = scan(storage, supplier)
     summary_dict = summary(rows)

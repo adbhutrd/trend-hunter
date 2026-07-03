@@ -7,6 +7,7 @@ Five reliability principles in code:
   * bounded       → Semaphore limits per-scraper concurrency
   * self-testing  → doctor() reads the same health table this runner writes
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -43,7 +44,7 @@ async def run_once(storage: DuckDBStorage, scrapers: list[Scraper] | None = None
         try:
             rows = await s.fetch()
             return s.name, rows, None
-        except Exception as e:                                        # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             return s.name, [], e
 
     tasks = [_run_one(s) for s in scrapers]
@@ -57,15 +58,17 @@ async def run_once(storage: DuckDBStorage, scrapers: list[Scraper] | None = None
             logger.error(f"ingest: {name} failed: {err}")
             storage.upsert(
                 "health",
-                [{
-                    "source": name,
-                    "state": HealthState.FAILING.value,
-                    "last_run": run_ts,
-                    "last_ok": None,
-                    "rows_in": 0,
-                    "error_rate": 1.0,
-                    "detail": str(err)[:500],
-                }],
+                [
+                    {
+                        "source": name,
+                        "state": HealthState.FAILING.value,
+                        "last_run": run_ts,
+                        "last_ok": None,
+                        "rows_in": 0,
+                        "error_rate": 1.0,
+                        "detail": str(err)[:500],
+                    }
+                ],
             )
             summary[name] = 0
             continue
@@ -81,30 +84,34 @@ async def run_once(storage: DuckDBStorage, scrapers: list[Scraper] | None = None
                 if isinstance(v.get("price"), (int, float)):
                     price = float(v["price"])
                     break
-            product_rows.append({
-                "source": sig.source,
-                "external_id": sig.external_id,
-                "captured_at": sig.captured_at,
-                "title": payload.get("title"),
-                "price": price,
-                "currency": currency,
-                "url": f"{payload.get('url') or ''}/products/{payload.get('handle') or sig.external_id}",
-                "payload": json.dumps(payload) if payload else None,
-            })
+            product_rows.append(
+                {
+                    "source": sig.source,
+                    "external_id": sig.external_id,
+                    "captured_at": sig.captured_at,
+                    "title": payload.get("title"),
+                    "price": price,
+                    "currency": currency,
+                    "url": f"{payload.get('url') or ''}/products/{payload.get('handle') or sig.external_id}",
+                    "payload": json.dumps(payload) if payload else None,
+                }
+            )
 
         written = storage.upsert("products", product_rows) if product_rows else 0
 
         storage.upsert(
             "health",
-            [{
-                "source": name,
-                "state": HealthState.OK.value,
-                "last_run": run_ts,
-                "last_ok": run_ts,
-                "rows_in": written,
-                "error_rate": 0.0,
-                "detail": f"wrote {written} products",
-            }],
+            [
+                {
+                    "source": name,
+                    "state": HealthState.OK.value,
+                    "last_run": run_ts,
+                    "last_ok": run_ts,
+                    "rows_in": written,
+                    "error_rate": 0.0,
+                    "detail": f"wrote {written} products",
+                }
+            ],
         )
         summary[name] = written
         logger.info(f"ingest: {name} → {written} products")

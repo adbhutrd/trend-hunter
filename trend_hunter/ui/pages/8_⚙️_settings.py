@@ -1,4 +1,5 @@
 """⚙️ Settings — manage sources.json + env, run doctor live, edit intervals."""
+
 from __future__ import annotations
 
 import json
@@ -89,7 +90,7 @@ st.divider()
 st.subheader("Run `make doctor` here")
 if st.button("🩺 Run doctor now"):
     with st.spinner("running self-test…"):
-        result = subprocess.run(                                # noqa: S603
+        result = subprocess.run(  # noqa: S603
             [sys.executable, "-m", "trend_hunter.scripts.doctor"],
             capture_output=True,
             text=True,
@@ -104,5 +105,6 @@ if st.button("🩺 Run doctor now"):
 # ── env dump ─────────────────────────────────────────────────────────────────
 with st.expander("Environment (TH_-prefixed only)"):
     import os
+
     env = {k: v for k, v in os.environ.items() if k.startswith("TH_")}
     st.json(env)

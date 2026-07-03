@@ -1,4 +1,5 @@
 """Standalone aggregate runner — same as `make aggregate`."""
+
 from __future__ import annotations
 
 from trend_hunter.adapters.storage_duckdb import open_storage

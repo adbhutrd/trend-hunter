@@ -10,6 +10,7 @@ This is *transparent*, *fast*, and *correctly tells you when it doesn't know*
 (`UNKNOWN`), which is more honest than Prophet over-smoothing new-product
 bursts in Phase 1. Prophet + ruptures come in Phase 3.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable

@@ -8,6 +8,7 @@ Pure orchestration over three Protocol seams:
 Output: one `Money` row per profitable match (margin ≥ threshold), persisted
 to the `money` table so the dashboard can surface it as a daily ranking.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -23,16 +24,16 @@ from trend_hunter.core.types import Money
 
 @dataclass(frozen=True, slots=True)
 class MoneyRow:
-    sku: str                      # "<store_source>/<external_id>"
+    sku: str  # "<store_source>/<external_id>"
     retail_price: float
     supplier_cost: float
     shipping_cost: float
     cac_estimate: float
-    margin_pct: float             # 0..1
+    margin_pct: float  # 0..1
     currency: str
     supplier_name: str
     supplier_url: str
-    matched_via: str              # "csv" | "mock"
+    matched_via: str  # "csv" | "mock"
     product_title: str | None
 
 
@@ -50,20 +51,24 @@ def compute_margin(retail: float, supplier: float, shipping: float, cac: float) 
     """Pure money calculator used by the scanner."""
     profit = retail - supplier - shipping - cac
     margin = (profit / retail) if retail > 0 else 0.0
-    return Money(
-        sku="",
-        horizon_days=0,
-        point_estimate=0.0,
-        lower_80=0.0,
-        upper_80=0.0,
-        confidence=0.0,
-    ) if False else Money(  # never hit; we'll fill a real Money below
-        sku="",
-        horizon_days=0,
-        point_estimate=margin,
-        lower_80=margin,
-        upper_80=margin,
-        confidence=margin,
+    return (
+        Money(
+            sku="",
+            horizon_days=0,
+            point_estimate=0.0,
+            lower_80=0.0,
+            upper_80=0.0,
+            confidence=0.0,
+        )
+        if False
+        else Money(  # never hit; we'll fill a real Money below
+            sku="",
+            horizon_days=0,
+            point_estimate=margin,
+            lower_80=margin,
+            upper_80=margin,
+            confidence=margin,
+        )
     )
 
 
@@ -112,9 +117,11 @@ def scan(
             """,
             (float(min_price_usd),),
         )
-    except Exception as e:                                 # noqa: BLE001
-        logger.warning(f"arbitrage: agg_product_status missing ({type(e).__name__}); "
-                       f"have you run `make aggregate`?")
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            f"arbitrage: agg_product_status missing ({type(e).__name__}); "
+            f"have you run `make aggregate`?"
+        )
         return []
 
     profitable: list[MoneyRow] = []
@@ -127,11 +134,16 @@ def scan(
         m = matches[0]
         row = _to_money_row(sku_id, float(r["avg_price_7d"]), m)
         row = MoneyRow(
-            sku=row.sku, retail_price=row.retail_price,
-            supplier_cost=row.supplier_cost, shipping_cost=row.shipping_cost,
-            cac_estimate=row.cac_estimate, margin_pct=row.margin_pct,
-            currency=row.currency, supplier_name=row.supplier_name,
-            supplier_url=row.supplier_url, matched_via=row.matched_via,
+            sku=row.sku,
+            retail_price=row.retail_price,
+            supplier_cost=row.supplier_cost,
+            shipping_cost=row.shipping_cost,
+            cac_estimate=row.cac_estimate,
+            margin_pct=row.margin_pct,
+            currency=row.currency,
+            supplier_name=row.supplier_name,
+            supplier_url=row.supplier_url,
+            matched_via=row.matched_via,
             product_title=title,
         )
         if row.margin_pct >= min_margin_pct:
@@ -143,21 +155,26 @@ def scan(
         st.execute("DELETE FROM money")
         if profitable:
             ts = dt.datetime.now(dt.UTC)
-            st.upsert("money", [
-                {
-                    "sku": p.sku,
-                    "retail_price": p.retail_price,
-                    "supplier_cost": p.supplier_cost,
-                    "shipping_cost": p.shipping_cost,
-                    "cac_estimate": p.cac_estimate,
-                    "margin_pct": p.margin_pct,
-                    "currency": p.currency,
-                    "recorded_at": ts,
-                }
-                for p in profitable
-            ])
+            st.upsert(
+                "money",
+                [
+                    {
+                        "sku": p.sku,
+                        "retail_price": p.retail_price,
+                        "supplier_cost": p.supplier_cost,
+                        "shipping_cost": p.shipping_cost,
+                        "cac_estimate": p.cac_estimate,
+                        "margin_pct": p.margin_pct,
+                        "currency": p.currency,
+                        "recorded_at": ts,
+                    }
+                    for p in profitable
+                ],
+            )
 
-    logger.info(f"arbitrage: {len(profitable)} profitable match(es) ≥ {min_margin_pct*100:.0f}% margin")
+    logger.info(
+        f"arbitrage: {len(profitable)} profitable match(es) ≥ {min_margin_pct * 100:.0f}% margin"
+    )
     return profitable
 
 

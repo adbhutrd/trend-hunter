@@ -5,6 +5,7 @@ disk) for Phase 1; the dashboard reads those tables with sub-second
 DuckDB query latency and no extra filesystem dance. Large history is
 parquet-exported in Phase 2 via DuckDB's native Parquet writer.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -114,7 +115,9 @@ def classify_all(storage: DuckDBStorage) -> int:
         """,
     ).fetchall()
 
-    by_key: dict[tuple[str, str], tuple[str | None, list[tuple[str, str, datetime, float | None]]]] = {}
+    by_key: dict[
+        tuple[str, str], tuple[str | None, list[tuple[str, str, datetime, float | None]]]
+    ] = {}
     for src, ext, title, ts, price in rows:
         key = (src, ext)
         if key not in by_key:
@@ -126,16 +129,18 @@ def classify_all(storage: DuckDBStorage) -> int:
         c_p = classify_one(hist)
         if c_p is None:
             continue
-        classified.append({
-            "source": src,
-            "external_id": ext,
-            "title": title,
-            "status": c_p.status,
-            "slope_pct_per_day": c_p.slope_pct_per_day,
-            "n_points": c_p.n_points,
-            "window_start": c_p.window_start,
-            "window_end": c_p.window_end,
-        })
+        classified.append(
+            {
+                "source": src,
+                "external_id": ext,
+                "title": title,
+                "status": c_p.status,
+                "slope_pct_per_day": c_p.slope_pct_per_day,
+                "n_points": c_p.n_points,
+                "window_start": c_p.window_start,
+                "window_end": c_p.window_end,
+            }
+        )
 
     if classified:
         pd.DataFrame(classified)

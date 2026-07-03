@@ -11,6 +11,7 @@ Covered behaviours:
 All tests pass the ``storage`` fixture directly so we don't fight the
 single-writer FCNTL lock that the fixture holds.
 """
+
 from __future__ import annotations
 
 import json
@@ -27,12 +28,11 @@ def _payload(counters) -> dict:
     return json.loads(counters)
 
 
-def test_successful_run_marks_status_ok(storage):                          # type: ignore[no-untyped-def]
+def test_successful_run_marks_status_ok(storage):  # type: ignore[no-untyped-def]
     with record_run("scan", storage=storage) as rec:
         rec.set_counters({"products_in": 7})
     rows = storage.query(
-        "SELECT status, duration_ms, counters, error_type "
-        "FROM run_history WHERE command = 'scan'",
+        "SELECT status, duration_ms, counters, error_type FROM run_history WHERE command = 'scan'",
     )
     assert len(rows) == 1
     row = rows[0]
@@ -42,14 +42,13 @@ def test_successful_run_marks_status_ok(storage):                          # typ
     assert _payload(row["counters"]).get("products_in") == 7
 
 
-def test_failed_run_marks_status_err_and_reraises(storage):                  # type: ignore[no-untyped-def]
+def test_failed_run_marks_status_err_and_reraises(storage):  # type: ignore[no-untyped-def]
     with pytest.raises(RuntimeError, match="boom"):
         with record_run("scan", storage=storage) as rec:
             rec.set_counters({"products_in": 0})
             raise RuntimeError("boom")
     rows = storage.query(
-        "SELECT status, error_type, error_message "
-        "FROM run_history WHERE command = 'scan'",
+        "SELECT status, error_type, error_message FROM run_history WHERE command = 'scan'",
     )
     assert len(rows) == 1
     row = rows[0]
@@ -58,7 +57,7 @@ def test_failed_run_marks_status_err_and_reraises(storage):                  # t
     assert "boom" in (row["error_message"] or "")
 
 
-def test_dedupe_key_collapses_retries(storage):                              # type: ignore[no-untyped-def]
+def test_dedupe_key_collapses_retries(storage):  # type: ignore[no-untyped-def]
     with record_run(
         "forget",
         storage=storage,
@@ -74,15 +73,14 @@ def test_dedupe_key_collapses_retries(storage):                              # t
         rec.set_counters({"audits": 2})
 
     rows = storage.query(
-        "SELECT counters FROM run_history "
-        "WHERE command = 'forget' AND dedupe_key = 'abc'",
+        "SELECT counters FROM run_history WHERE command = 'forget' AND dedupe_key = 'abc'",
     )
     assert len(rows) == 1, "dedupe_key should collapse to one row"
     # The LATEST counters are kept (last writer wins).
     assert _payload(rows[0]["counters"]).get("audits") == 2
 
 
-def test_counters_accumulate(storage):                                       # type: ignore[no-untyped-def]
+def test_counters_accumulate(storage):  # type: ignore[no-untyped-def]
     with record_run("scan", storage=storage) as rec:
         rec.incr("products_in")
         rec.incr("products_in", by=4)
@@ -95,7 +93,7 @@ def test_counters_accumulate(storage):                                       # t
     assert payload["tried"] is True
 
 
-def test_each_command_creates_a_new_row(storage):                            # type: ignore[no-untyped-def]
+def test_each_command_creates_a_new_row(storage):  # type: ignore[no-untyped-def]
     # No dedupe_key, two distinct runs ⇒ two rows (different run_ids).
     with record_run("scan", storage=storage) as rec:
         rec.set_counters({"a": 1})
@@ -107,7 +105,7 @@ def test_each_command_creates_a_new_row(storage):                            # t
     assert len(rows) == 2, "different run_ids ⇒ two rows"
 
 
-def test_open_writer_owns_storage_lifecycle(tmp_path):                       # type: ignore[no-untyped-def]
+def test_open_writer_owns_storage_lifecycle(tmp_path):  # type: ignore[no-untyped-def]
     """When called WITHOUT a `storage` arg, record_run opens its own writer
     cleanly and closes on context exit (so the flock doesn't bind across
     calls)."""

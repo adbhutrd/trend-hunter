@@ -19,6 +19,7 @@ Usage
     python -m trend_hunter.cli loop-report                 # 7d feedback-loop summary
     python -m trend_hunter.cli alert                       # push notifications if degradation
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,17 +35,20 @@ from trend_hunter.observe.run_ledger import record_run
 # ── helpers ───────────────────────────────────────────────────────────────────
 def _open_writer():
     from trend_hunter.adapters.storage_duckdb import open_storage
+
     return open_storage(read_only=False)
 
 
 def _open_reader():
     from trend_hunter.adapters.storage_duckdb import open_storage
+
     return open_storage(read_only=True)
 
 
 # ── ingest / aggregate ────────────────────────────────────────────────────────
 def _cmd_scan(_args: argparse.Namespace) -> None:
     from trend_hunter.ingest.runner import run_once
+
     with _open_writer() as storage, record_run("scan", storage=storage) as rec:
         summary = asyncio.run(run_once(storage))
         rec.set_counters({"products_in": int(summary.get("total", 0))})
@@ -64,10 +68,12 @@ def _cmd_run(_args: argparse.Namespace) -> None:
         agg = aggregate(storage)
         n = classify_all(storage)
         log.info(f"aggregate: {agg}; classified={n}")
-        rec.set_counters({
-            "products_in": int(scan_summary.get("total", 0)),
-            "classified": int(n),
-        })
+        rec.set_counters(
+            {
+                "products_in": int(scan_summary.get("total", 0)),
+                "classified": int(n),
+            }
+        )
     rc = doctor()
     if rc != 0:
         sys.exit(rc)
@@ -75,6 +81,7 @@ def _cmd_run(_args: argparse.Namespace) -> None:
 
 def _cmd_aggregate(_args: argparse.Namespace) -> None:
     from trend_hunter.intelligence.aggregator import aggregate, classify_all
+
     with _open_writer() as storage, record_run("aggregate", storage=storage) as rec:
         out = aggregate(storage)
         n = classify_all(storage)
@@ -84,6 +91,7 @@ def _cmd_aggregate(_args: argparse.Namespace) -> None:
 
 def _cmd_doctor(_args: argparse.Namespace) -> None:
     from trend_hunter.scripts.doctor import doctor
+
     sys.exit(doctor())
 
 
@@ -121,7 +129,7 @@ def _cmd_arbitrage(_args: argparse.Namespace) -> None:
 
     with _open_writer() as storage, record_run("arbitrage", storage=storage) as rec:
         cat = CsvCatalogSupplier(Path("./data/suppliers.csv"))
-        rows = scan(storage, cat if cat._items else MockSupplier())    # type: ignore[arg-type]
+        rows = scan(storage, cat if cat._items else MockSupplier())  # type: ignore[arg-type]
         rec.set_counters({"money_rows": summary(rows)["count"]})
     s = summary(rows)
     get().info(f"  arbitrage: {s}")
@@ -141,14 +149,10 @@ def _cmd_validate_ads(_args: argparse.Namespace) -> None:
         validated = v.validated()
         rec.set_counters({"validated": len(validated)})
     print(
-        f"  ads: {len(v.all())} entries, "
-        f"{len(validated)} validated (≥30 days running)",
+        f"  ads: {len(v.all())} entries, {len(validated)} validated (≥30 days running)",
     )
     for a in validated[:20]:
-        print(
-            f"    {a.advertiser:20} niche={a.niche:20} "
-            f"{a.days_running:>4d}d  {a.source}"
-        )
+        print(f"    {a.advertiser:20} niche={a.niche:20} {a.days_running:>4d}d  {a.source}")
 
 
 def _cmd_scaffold(args: argparse.Namespace) -> None:
@@ -160,13 +164,13 @@ def _cmd_scaffold(args: argparse.Namespace) -> None:
     top = int(args.top)
     with _open_writer() as storage, record_run("scaffold", storage=storage) as rec:
         cat = CsvCatalogSupplier(Path("./data/suppliers.csv"))
-        rows = scan(storage, cat if cat._items else MockSupplier())    # type: ignore[arg-type]
+        rows = scan(storage, cat if cat._items else MockSupplier())  # type: ignore[arg-type]
         out = scaffold(rows, top=top, dry_run=not live)
-        rec.set_counters({
-            "scaffolded": sum(
-                1 for r in out if r.get("status") in {"drafted", "pushed"}
-            ),
-        })
+        rec.set_counters(
+            {
+                "scaffolded": sum(1 for r in out if r.get("status") in {"drafted", "pushed"}),
+            }
+        )
     print(f"  scaffold: top={top} dry_run={not live}; results:")
     for r in out:
         print(f"    {r.get('status'):12} sku={r.get('sku')}")
@@ -186,15 +190,17 @@ def _cmd_money_sweep(args: argparse.Namespace) -> None:
     top = int(args.top)
     with _open_writer() as storage, record_run("money-sweep", storage=storage) as rec:
         cat = CsvCatalogSupplier(Path("./data/suppliers.csv"))
-        supplier = cat if cat._items else MockSupplier()              # type: ignore[assignment]
+        supplier = cat if cat._items else MockSupplier()  # type: ignore[assignment]
         rows = scan(storage, supplier)
         s = summary(rows)
         print(f"  money sweep: {s}")
         out = scaffold(rows, top=top, dry_run=not live)
-        rec.set_counters({
-            "money_rows": s["count"],
-            "scaffolded": sum(1 for r in out if r.get("status") in {"drafted", "pushed"}),
-        })
+        rec.set_counters(
+            {
+                "money_rows": s["count"],
+                "scaffolded": sum(1 for r in out if r.get("status") in {"drafted", "pushed"}),
+            }
+        )
     print(f"  scaffold: {len(out)} push result(s):")
     for r in out:
         print(f"    {r.get('status'):12} sku={r.get('sku')}")
@@ -221,6 +227,7 @@ def _cmd_calibrate(args: argparse.Namespace) -> None:
     with _open_reader() as storage:
         if sub == "list":
             from trend_hunter.observe.calibrate import pending_calibrations
+
             rows = pending_calibrations(storage, days=int(args.days))
             if rows:
                 print(f"  pending calibrations ({len(rows)}):")
@@ -235,14 +242,18 @@ def _cmd_calibrate(args: argparse.Namespace) -> None:
                 print("  (no pending calibrations — forecasts get actuals quickly)")
         elif sub == "update":
             from trend_hunter.observe.calibrate import update_actual
+
             if not args.calibrate_id or args.actual_price is None:
                 print("usage: calibrate update <calibrate_id> <actual_price>")
                 return
             with _open_writer() as storage_w:
                 update_actual(storage_w, args.calibrate_id, float(args.actual_price))
-            print(f"  calibration {args.calibrate_id[:8]} updated: actual=${float(args.actual_price):.2f}")
+            print(
+                f"  calibration {args.calibrate_id[:8]} updated: actual=${float(args.actual_price):.2f}"
+            )
         else:
             from trend_hunter.observe.calibrate import calibration_summary
+
             cal = calibration_summary(storage, days=int(args.days))
             if cal["count"]:
                 print(f"  calibration summary (last {args.days}d):")
@@ -280,7 +291,7 @@ def _chain_loop_report() -> None:
             print(render(storage, days=7))
         finally:
             storage.close()
-    except Exception as exc:                                                    # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         get().warning("run-chaining: loop-report failed: %s", exc)
 
 
@@ -296,17 +307,19 @@ def _chain_alerts() -> None:
                 "run-chaining: %d degraded command(s) alerted",
                 len(offenders),
             )
-    except Exception as exc:                                                    # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         get().warning("run-chaining: alerts failed: %s", exc)
 
 
 # ── ops / UI ──────────────────────────────────────────────────────────────────
 def _cmd_schedule(_args: argparse.Namespace) -> None:
     from trend_hunter.flows.daily import start
+
     sched = start()
     try:
         while True:
             import time
+
             time.sleep(3600)
     except (KeyboardInterrupt, SystemExit):
         sched.shutdown(wait=False)
@@ -314,12 +327,18 @@ def _cmd_schedule(_args: argparse.Namespace) -> None:
 
 def _cmd_dashboard(_args: argparse.Namespace) -> None:
     import subprocess
+
     port = get_settings().dash_port
     cmd = [
-        sys.executable, "-m", "streamlit", "run",
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
         "trend_hunter/ui/Home.py",
-        "--server.port", str(port),
-        "--server.headless", "true",
+        "--server.port",
+        str(port),
+        "--server.headless",
+        "true",
     ]
     get().info(f"launching dashboard on http://localhost:{port}")
     subprocess.run(cmd, check=False)
@@ -338,16 +357,23 @@ def _cmd_migrate(_args: argparse.Namespace) -> None:
             "SELECT version FROM _schema_version ORDER BY version",
         )
     log.info(
-        f"migrate: applied schema versions = "
-        f"{[r['version'] for r in versions]}",
+        f"migrate: applied schema versions = {[r['version'] for r in versions]}",
     )
 
 
 def _cmd_stats(_args: argparse.Namespace) -> None:
     with _open_reader() as storage:
-        for table in ("products", "leads", "money", "rop_audit",
-                      "health", "forecasts", "run_history",
-                      "calibrate", "corrective_actions"):
+        for table in (
+            "products",
+            "leads",
+            "money",
+            "rop_audit",
+            "health",
+            "forecasts",
+            "run_history",
+            "calibrate",
+            "corrective_actions",
+        ):
             try:
                 n = storage.query(f"SELECT count(*) AS n FROM {table}")[0]["n"]
             except Exception:
@@ -358,9 +384,13 @@ def _cmd_stats(_args: argparse.Namespace) -> None:
 def _cmd_forget(args: argparse.Namespace) -> None:
     """GDPR right-to-erasure — drop lead rows + write hashed retention marker."""
     import hashlib
+
     subject_email = args.email
     subject_hash = hashlib.sha256(subject_email.encode()).hexdigest()[:16]
-    with _open_writer() as storage, record_run("forget", storage=storage, dedupe_key=subject_hash) as rec:
+    with (
+        _open_writer() as storage,
+        record_run("forget", storage=storage, dedupe_key=subject_hash) as rec,
+    ):
         before = storage.query(
             "SELECT count(*) AS n FROM leads WHERE contact_email = ?",
             (subject_email,),
@@ -389,6 +419,7 @@ def _cmd_forget(args: argparse.Namespace) -> None:
 # ── loop-report ────────────────────────────────────────────────────────────────
 def _cmd_loop_report(args: argparse.Namespace) -> None:
     from trend_hunter.observe.loop_report import render
+
     days = int(args.days)
     with _open_reader() as storage:
         print(render(storage, days=days))
@@ -405,19 +436,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("scan", help="ingest from all enabled sources (once)").set_defaults(func=_cmd_scan)
-    sub.add_parser("forecast", help="quick smoke-test of BaselineForecaster + calibration record").set_defaults(func=_cmd_forecast)
+    sub.add_parser("scan", help="ingest from all enabled sources (once)").set_defaults(
+        func=_cmd_scan
+    )
+    sub.add_parser(
+        "forecast", help="quick smoke-test of BaselineForecaster + calibration record"
+    ).set_defaults(func=_cmd_forecast)
     rp = sub.add_parser("run", help="scan + classify + aggregate + doctor")
     rp.set_defaults(func=_cmd_run)
     sub.add_parser("aggregate", help="build dashboard roll-ups").set_defaults(func=_cmd_aggregate)
-    sub.add_parser("doctor", help="self-test (DB, schema, free disk, freshness)").set_defaults(func=_cmd_doctor)
-    sub.add_parser("dashboard", help="launch Streamlit on configured port").set_defaults(func=_cmd_dashboard)
+    sub.add_parser("doctor", help="self-test (DB, schema, free disk, freshness)").set_defaults(
+        func=_cmd_doctor
+    )
+    sub.add_parser("dashboard", help="launch Streamlit on configured port").set_defaults(
+        func=_cmd_dashboard
+    )
     sub.add_parser("stats", help="row counts per table").set_defaults(func=_cmd_stats)
     sub.add_parser(
         "migrate",
         help="open writer briefly to apply pending schema migrations",
     ).set_defaults(func=_cmd_migrate)
-    sub.add_parser("schedule", help="start APScheduler (foreground)").set_defaults(func=_cmd_schedule)
+    sub.add_parser("schedule", help="start APScheduler (foreground)").set_defaults(
+        func=_cmd_schedule
+    )
 
     ap = sub.add_parser("arbitrage", help="match trending products ↔ suppliers")
     ap.set_defaults(func=_cmd_arbitrage)
@@ -438,13 +479,17 @@ def build_parser() -> argparse.ArgumentParser:
     # ── calibrate ────────────────────────────────────────────────────────────
     calp = sub.add_parser("calibrate", help="forecast back-testing and MAPE reporting")
     calp.add_argument(
-        "calibrate_cmd", nargs="?",
-        choices=("list", "update", "summary"), default="summary",
+        "calibrate_cmd",
+        nargs="?",
+        choices=("list", "update", "summary"),
+        default="summary",
         help="list pending, update actual, or show MAPE summary",
     )
     calp.add_argument("--days", type=int, default=7, help="lookback window (default 7)")
     calp.add_argument("calibrate_id", nargs="?", help="calibrate_id for 'update' subcommand")
-    calp.add_argument("actual_price", nargs="?", type=float, help="actual price for 'update' subcommand")
+    calp.add_argument(
+        "actual_price", nargs="?", type=float, help="actual price for 'update' subcommand"
+    )
     calp.set_defaults(func=_cmd_calibrate)
 
     # ── alert ────────────────────────────────────────────────────────────────

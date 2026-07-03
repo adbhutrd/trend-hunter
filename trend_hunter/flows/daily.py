@@ -6,6 +6,7 @@ automatically — operators call `python -m trend_hunter.flows.daily` themselves
 inside a systemd user service on a true always-on host. For laptop-local
 development, `make run` does the same work in a synchronous one-shot.
 """
+
 from __future__ import annotations
 
 import datetime as dt

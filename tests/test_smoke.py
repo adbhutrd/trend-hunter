@@ -3,6 +3,7 @@
 The subprocess cwd is the project root (parent of this file), so the CLI can
 import `trend_hunter` regardless of where pytest is invoked from.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -13,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(                                                    # noqa: S603
+    return subprocess.run(  # noqa: S603
         [sys.executable, "-m", "trend_hunter.cli", *args],
         capture_output=True,
         text=True,
@@ -52,11 +53,13 @@ def test_forget_unknown_email_is_idempotent(tmp_path):
         # pointing to the tmp_path DB.  Use subprocess to match the
         # other smoke tests, but reset env so it hits tmp_path.
         env = {**os.environ, "TH_DB_PATH": str(db)}
-        r = subprocess.run(                                                     # noqa: S603
+        r = subprocess.run(  # noqa: S603
             [sys.executable, "-m", "trend_hunter.cli", "forget", "nobody-abc-123@example.com"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
             cwd=str(PROJECT_ROOT),
-            env=env, check=False,
+            env=env,
+            check=False,
         )
         assert "Traceback" not in (r.stdout or "")
         assert "Traceback" not in (r.stderr or "")

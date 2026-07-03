@@ -7,6 +7,7 @@ Driven by environment:
 If either is missing we DO NOT push — we log a dry-run summary instead, so
 operators can rehearse the scaffolding flow with zero blast radius.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -86,7 +87,9 @@ class ShopifyPusher:
             r = await client.post(url, headers=headers, json=payload)
 
         if 200 <= r.status_code < 300:
-            data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            data = (
+                r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            )
             product_id = data.get("product", {}).get("id")
             logger.success(f"[shopify live] pushed sku={draft.sku} id={product_id}")
             return {"status": "pushed", "id": product_id, "sku": draft.sku}

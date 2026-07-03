@@ -1,4 +1,5 @@
 """🏠 Health — heartbeat per source, last run, error rate, ingestion volume."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -50,7 +51,7 @@ def _volume_per_source(days: int):
 
 try:
     rows = _health_rows()
-except Exception as e:                                                        # noqa: BLE001
+except Exception as e:  # noqa: BLE001
     st.error(f"DB unreachable: {e}")
     st.stop()
 
@@ -85,6 +86,7 @@ days = st.slider("Window (days)", min_value=1, max_value=30, value=14)
 vol = _volume_per_source(days)
 if vol:
     import pandas as pd
+
     df = pd.DataFrame(vol)
     df["day"] = pd.to_datetime(df["day"])
     pivot = df.pivot_table(index="day", columns="source", values="rows", fill_value=0)
@@ -103,9 +105,7 @@ with col1:
         st.rerun()
 with col2:
     st.code(
-        "make scan     # one-shot ingest\n"
-        "make doctor   # self-test\n"
-        "make aggregate",
+        "make scan     # one-shot ingest\nmake doctor   # self-test\nmake aggregate",
         language="bash",
     )
 with col3:

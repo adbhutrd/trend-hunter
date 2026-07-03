@@ -15,6 +15,7 @@ Pattern::
 All I/O goes through :class:`DuckDBStorage` so the row writes participate in
 the same FCNTL-lock + schema-version contract as every other writer.
 """
+
 from __future__ import annotations
 
 import json
@@ -115,8 +116,7 @@ def record_run(
         # existing run_id so retries don't multiply rows.  Otherwise insert.
         if dedupe_key:
             existing = storage.query(
-                "SELECT run_id FROM run_history "
-                "WHERE command = ? AND dedupe_key = ?",
+                "SELECT run_id FROM run_history WHERE command = ? AND dedupe_key = ?",
                 (command, dedupe_key),
             )
             if existing:
@@ -156,7 +156,7 @@ def record_run(
             "WHERE run_id = ?",
             (finished_ms - started_at_ms, _safe_json(rec.counters), run_id),
         )
-    except BaseException as exc:                                            # noqa: BLE001
+    except BaseException as exc:  # noqa: BLE001
         try:
             finished_ms = int(time.time() * 1000)
             storage.execute(
@@ -221,8 +221,7 @@ def success_rate(storage: DuckDBStorage, command: str, days: int = 7) -> float:
 
 def last_run(storage: DuckDBStorage, command: str) -> dict | None:
     rows = storage.query(
-        "SELECT * FROM run_history WHERE command = ? "
-        "ORDER BY started_at DESC LIMIT 1",
+        "SELECT * FROM run_history WHERE command = ? ORDER BY started_at DESC LIMIT 1",
         (command,),
     )
     return rows[0] if rows else None

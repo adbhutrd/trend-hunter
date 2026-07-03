@@ -1,4 +1,5 @@
 """📈 Trends — classifier-driven product status dashboard."""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -88,10 +89,7 @@ min_points = st.sidebar.slider(
     value=3,
 )
 
-filtered = [
-    r for r in rows
-    if r["status"] in sel and (r["n_points"] or 0) >= min_points
-]
+filtered = [r for r in rows if r["status"] in sel and (r["n_points"] or 0) >= min_points]
 
 
 # ── KPI cards ────────────────────────────────────────────────────────────────
@@ -103,7 +101,7 @@ if counts:
 
 # ── AG Grid table ────────────────────────────────────────────────────────────
 _df = pd.DataFrame(filtered)
-gb = GridOptionsBuilder.from_dataframe(_df)                                 # type: ignore[arg-type]
+gb = GridOptionsBuilder.from_dataframe(_df)  # type: ignore[arg-type]
 gb.configure_side_bar()
 gb.configure_default_column(filter=True, sortable=True, resizable=True)
 gb.configure_pagination(paginationAutoPageSize=False)

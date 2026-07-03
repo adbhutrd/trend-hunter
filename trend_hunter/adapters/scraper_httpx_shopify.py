@@ -4,6 +4,7 @@ Implements core.ports.Scraper for one source only: Shopify.
 Other sources (Reddit, Meta ADL, TikTok, Google Trends, AliExpress)
 will live in sibling files; this is the proven, tested backbone.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -55,7 +56,7 @@ class ShopifyScraper:
             for coro in asyncio.as_completed(tasks):
                 try:
                     signals.extend(await coro)
-                except Exception as e:                                # noqa: BLE001
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"shopify: store task failed: {type(e).__name__}: {e}")
         logger.info(f"shopify: ingested {len(signals)} products across {len(self.stores)} stores")
         return signals
@@ -85,7 +86,7 @@ class ShopifyScraper:
             target = f"{url}/products.json"
             try:
                 r = await self._get_with_retry(client, target)
-            except Exception as e:                                    # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"shopify: {target} → {type(e).__name__}: {e}")
                 return []
 

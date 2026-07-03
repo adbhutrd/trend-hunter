@@ -8,6 +8,7 @@ Verifies that `DuckDBStorage` honours the Storage protocol:
   * read_only mode raises on upsert
   * health() returns the rows we wrote
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -23,34 +24,41 @@ def test_schema_applied(storage: DuckDBStorage):
 
 def test_upsert_idempotent(storage: DuckDBStorage):
     now = datetime.now(UTC)
-    sample = [{
-        "source": "shopify",
-        "external_id": "sku-1",
-        "captured_at": now,
-        "title": "Sample",
-        "price": 12.5,
-        "currency": "USD",
-        "url": "https://example.com/p/1",
-        "payload": '{"id": 1}',
-    }]
+    sample = [
+        {
+            "source": "shopify",
+            "external_id": "sku-1",
+            "captured_at": now,
+            "title": "Sample",
+            "price": 12.5,
+            "currency": "USD",
+            "url": "https://example.com/p/1",
+            "payload": '{"id": 1}',
+        }
+    ]
     storage.upsert("products", sample)
     first = storage.query("SELECT count(*) AS n FROM products")[0]["n"]
-    storage.upsert("products", sample)              # same row, ON CONFLICT
+    storage.upsert("products", sample)  # same row, ON CONFLICT
     second = storage.query("SELECT count(*) AS n FROM products")[0]["n"]
     assert first == 1
     assert second == 1
 
 
 def test_query_returns_dicts(storage: DuckDBStorage):
-    storage.upsert("health", [{
-        "source": "shopify",
-        "state": HealthState.OK.value,
-        "last_run": datetime.now(UTC),
-        "last_ok": datetime.now(UTC),
-        "rows_in": 10,
-        "error_rate": 0.0,
-        "detail": "ok",
-    }])
+    storage.upsert(
+        "health",
+        [
+            {
+                "source": "shopify",
+                "state": HealthState.OK.value,
+                "last_run": datetime.now(UTC),
+                "last_ok": datetime.now(UTC),
+                "rows_in": 10,
+                "error_rate": 0.0,
+                "detail": "ok",
+            }
+        ],
+    )
     rows = storage.query("SELECT * FROM health WHERE source = ?", ("shopify",))
     assert len(rows) == 1
     r = rows[0]
@@ -69,5 +77,5 @@ def test_read_only_raises_on_upsert(tmp_path):
     try:
         ro2.upsert("t", [{"id": 1}])
     except RuntimeError:
-        return                                # expected
+        return  # expected
     raise AssertionError("read-only upsert should raise RuntimeError")

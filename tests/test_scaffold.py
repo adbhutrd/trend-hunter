@@ -1,4 +1,5 @@
 """Unit tests for the scaffold pipeline (draft builder + push dry-run logic)."""
+
 from __future__ import annotations
 
 import pytest
@@ -26,11 +27,14 @@ def _sample_row(margin: float = 0.4) -> MoneyRow:
 
 @pytest.mark.asyncio
 async def test_dry_run_does_not_through_when_unconfigured():
-    pusher = ShopifyPusher()                          # no env vars
+    pusher = ShopifyPusher()  # no env vars
     assert pusher.is_configured is False
     drafted = ProductDraft(
-        sku="x", title="t", body_html="b",
-        price_usd=10.0, sku_internal="x",
+        sku="x",
+        title="t",
+        body_html="b",
+        price_usd=10.0,
+        sku_internal="x",
     )
     out = await pusher.push(drafted, dry_run=True)
     assert out["status"] == "dry_run"

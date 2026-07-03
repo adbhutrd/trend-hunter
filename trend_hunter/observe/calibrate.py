@@ -12,6 +12,7 @@ Usage::
     record_calibration(storage, sku="ABC-123", predicted_price=14.50,
                        horizon_days=14, source_command="forecast")
 """
+
 from __future__ import annotations
 
 import uuid
@@ -93,7 +94,8 @@ def calibration_summary(storage: Any, days: int = 7) -> dict:
             abs(float(r["actual_price"]) - float(r["predicted_price"]))
             for r in rows
             if r["actual_price"] is not None and r["predicted_price"] is not None
-        ) / len(rows),
+        )
+        / len(rows),
     }
 
 

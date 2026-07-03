@@ -6,6 +6,7 @@ Operator flow:
         ⇒ prints what would push to the store (default dry-run)
         ⇒ if TH_SHOPIFY_DOMAIN + TH_SHOPIFY_TOKEN are set, real Admin API push
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,7 +28,7 @@ def draft_from_row(row: MoneyRow) -> ProductDraft:
             f"Retail: ${row.retail_price:.2f}. "
             f"Cost: ${row.supplier_cost:.2f}. "
             f"Shipping: ${row.shipping_cost:.2f}. "
-            f"Projected margin: {row.margin_pct*100:.0f}%.</p>"
+            f"Projected margin: {row.margin_pct * 100:.0f}%.</p>"
         ),
         price_usd=row.retail_price,
         sku_internal=row.sku.replace("/", "-"),
@@ -55,9 +56,6 @@ def scaffold(
     pusher = ShopifyPusher()
 
     async def _run_all() -> list[dict]:
-        return [
-            await pusher.push(draft_from_row(r), dry_run=dry_run)
-            for r in targets
-        ]
+        return [await pusher.push(draft_from_row(r), dry_run=dry_run) for r in targets]
 
     return asyncio.run(_run_all())

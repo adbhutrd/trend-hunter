@@ -8,6 +8,7 @@ Keeping dry-run by default means we never accidentally send a real
 email in testing, and we never ship a tool that emails without
 explicit operator approval.
 """
+
 from __future__ import annotations
 
 from loguru import logger

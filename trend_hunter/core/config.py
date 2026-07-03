@@ -1,4 +1,5 @@
 """Pydantic v2 settings — env vars + .env file, prefixed TH_, case-insensitive."""
+
 from __future__ import annotations
 
 from functools import lru_cache

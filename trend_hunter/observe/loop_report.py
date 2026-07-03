@@ -11,6 +11,7 @@ Prints:
 * dollars-on-track: 7-day mean ``retail_price * margin_pct`` from ``money``
 * delta vs prior 7d so drift is visible at a glance
 """
+
 from __future__ import annotations
 
 import json
@@ -22,7 +23,7 @@ from trend_hunter.observe.constants import CORE_COMMANDS, COUNTER_KEYS
 from trend_hunter.observe.run_ledger import recent_runs
 
 
-def _format_age(ts) -> str:                                                   # noqa: ANN001
+def _format_age(ts) -> str:  # noqa: ANN001
     if ts is None:
         return "—"
     if ts.tzinfo is None:
@@ -68,8 +69,7 @@ def render(storage: DuckDBStorage, days: int = 7) -> str:
     rows_7d = recent_runs(storage, days=days)
     rows_prev = recent_runs(storage, days=days * 2) if days > 0 else []
     cutoff = (datetime.now(UTC) - timedelta(days=days)).replace(tzinfo=None)
-    prev_window = [r for r in rows_prev
-                   if r.get("started_at") and r["started_at"] < cutoff]
+    prev_window = [r for r in rows_prev if r.get("started_at") and r["started_at"] < cutoff]
 
     out: list[str] = []
     out.append(
@@ -85,14 +85,11 @@ def render(storage: DuckDBStorage, days: int = 7) -> str:
             last_by_cmd[r["command"]] = r
     if not last_by_cmd:
         out.append(
-            "    (no rows yet — run a few `make` targets "
-            "to populate)\n",
+            "    (no rows yet — run a few `make` targets to populate)\n",
         )
     else:
         for cmd, r in sorted(last_by_cmd.items()):
-            ok = ("✅" if r["status"] == "ok"
-                  else "❌" if r["status"] == "err"
-                  else "⏳")
+            ok = "✅" if r["status"] == "ok" else "❌" if r["status"] == "err" else "⏳"
             age = _format_age(r.get("started_at"))
             dur = f"{r.get('duration_ms', 0)}ms" if r.get("duration_ms") else "—"
             err = f" ({r['error_type']})" if r.get("error_type") else ""
@@ -152,7 +149,7 @@ def render(storage: DuckDBStorage, days: int = 7) -> str:
             out.append(f"    mean abs error (MAE)= ${float(cal[0]['mae']):.2f}")
         else:
             out.append("    (no resolved calibrations yet — `make calibrate` to seed)")
-    except Exception as e:                                                      # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         out.append(f"    skipped ({type(e).__name__})")
     out.append("")
 
@@ -180,7 +177,7 @@ def render(storage: DuckDBStorage, days: int = 7) -> str:
             )
         else:
             out.append("    (no corrective actions recorded yet)")
-    except Exception as e:                                                      # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         out.append(f"    skipped ({type(e).__name__})")
     out.append("")
 
@@ -197,14 +194,12 @@ def render(storage: DuckDBStorage, days: int = 7) -> str:
         if margin_rows and margin_rows[0]["track_dollars"] is not None:
             out.append(f"▸ dollars on track (money table, last {days} days)")
             out.append(
-                f"    Σ(retail × margin)  = "
-                f"${margin_rows[0]['track_dollars']:,.2f}",
+                f"    Σ(retail × margin)  = ${margin_rows[0]['track_dollars']:,.2f}",
             )
             out.append(
-                f"    avg margin          = "
-                f"{margin_rows[0]['avg_margin'] * 100:.1f}%",
+                f"    avg margin          = {margin_rows[0]['avg_margin'] * 100:.1f}%",
             )
-    except Exception as e:                                                      # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         out.append(f"▸ dollars on track: skipped ({type(e).__name__})")
 
     out.append("")
@@ -223,7 +218,7 @@ def day_buckets(rows: list[dict]) -> dict[str, int]:
         if ts is None:
             continue
         try:
-            out[ts.strftime("%Y-%m-%d")] += 1                                   # type: ignore[union-attr]
+            out[ts.strftime("%Y-%m-%d")] += 1  # type: ignore[union-attr]
         except AttributeError:
             continue
     return dict(out)

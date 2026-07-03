@@ -1,4 +1,5 @@
 """loguru configuration — once-only, idempotent, structured JSONL with daily rotation."""
+
 from __future__ import annotations
 
 import sys

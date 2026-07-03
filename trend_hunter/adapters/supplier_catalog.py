@@ -11,6 +11,7 @@ Schema for `data/suppliers.csv` (header required, comma-separated):
 Example:
     alloy desk lamp,*lum-001,Lumify,https://lumify.example.com/p/001,8.40,CN,12
 """
+
 from __future__ import annotations
 
 import csv
@@ -33,6 +34,7 @@ class Supplier:
 
 class SupplierCatalog(Protocol):
     """Find suppliers matching a free-text product title."""
+
     def find(self, query: str, limit: int = 5) -> list[Supplier]: ...
 
 

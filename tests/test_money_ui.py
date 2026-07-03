@@ -3,6 +3,7 @@
 We test the niche-overlap function directly so the Money page's
 overlay stays correct even if Streamlit paginate/AGGrid changes.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -3,6 +3,7 @@
 Run via:
     make dashboard
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -54,14 +55,13 @@ try:
         ORDER BY source
         """,
     )
-except Exception as e:                                                        # noqa: BLE001
+except Exception as e:  # noqa: BLE001
     st.error(f"DB unreachable: {e}. Run `make init && make scan` first.")
     st.stop()
 
 if not rows:
     st.warning(
-        "No sources have ever written to the health table. "
-        "Run `make scan` and reload this page.",
+        "No sources have ever written to the health table. Run `make scan` and reload this page.",
     )
     st.stop()
 
@@ -69,7 +69,8 @@ if not rows:
 cols = st.columns(min(4, len(rows)))
 for col, row in zip(cols, rows, strict=False):
     icon = {"ok": "✅", "stale": "⚠️", "failing": "❌", "dead": "💀"}.get(
-        row["state"], "❓",
+        row["state"],
+        "❓",
     )
     col.metric(
         label=f"{icon} {row['source']}",

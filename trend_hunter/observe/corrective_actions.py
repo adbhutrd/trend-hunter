@@ -13,6 +13,7 @@ Usage::
                   trigger_value="0.3",
                   action_taken="rotated proxy; re-ran scaffold")
 """
+
 from __future__ import annotations
 
 import uuid
@@ -36,8 +37,15 @@ def record_action(
         "(action_id, trigger_cmd, trigger_metric, trigger_value, "
         " action_taken, outcome, outcome_detail) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (action_id, trigger_cmd, trigger_metric, trigger_value,
-         action_taken, outcome, outcome_detail),
+        (
+            action_id,
+            trigger_cmd,
+            trigger_metric,
+            trigger_value,
+            action_taken,
+            outcome,
+            outcome_detail,
+        ),
     )
     return action_id
 

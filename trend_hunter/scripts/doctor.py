@@ -15,6 +15,7 @@ Exit code:
   * 1 — yellow: warnings that don't block execution.
   * 2 — red: hard failures (DB missing, schema mismatch, free disk < 200 MB).
 """
+
 from __future__ import annotations
 
 import shutil
@@ -89,12 +90,12 @@ def doctor() -> int:
                     name = r["source"]
                     state = r["state"]
                     last_run = r["last_run"]
-                    age = (datetime.now(UTC) - last_run).total_seconds() / 3600 \
-                        if last_run else None
+                    age = (
+                        (datetime.now(UTC) - last_run).total_seconds() / 3600 if last_run else None
+                    )
                     if state in ("failing", "dead"):
                         log.error(
-                            f"❌ {name}: state={state} "
-                            f"last_run={last_run} detail={r['detail']}",
+                            f"❌ {name}: state={state} last_run={last_run} detail={r['detail']}",
                         )
                         rc = 2
                     elif age is not None and age > max_age:
@@ -104,7 +105,7 @@ def doctor() -> int:
                         rc = max(rc, 1)
                     else:
                         log.info(f"✅ {name}: {state} (last run {age:.1f}h ago)")
-    except Exception as e:                                                    # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         log.error(f"❌ doctor failed: {type(e).__name__}: {e}")
         return 2
 
@@ -119,4 +120,5 @@ def doctor() -> int:
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(doctor())

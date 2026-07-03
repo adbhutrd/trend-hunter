@@ -15,6 +15,7 @@ Run via :code:`make money` (arbitrage → scaffold) to populate the table.
 Run via :code:`make ads` to see what the validator reports standalone.
 Run via :code:`make loop-report` to see the 7-day trend.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -83,8 +84,7 @@ def _last_runs() -> dict[str, dict | None]:
     """Latest run per command from `run_history` — the feedback loop summary."""
     storage = _storage()
     out: dict[str, dict | None] = {}
-    for cmd in ("money-sweep", "arbitrage", "scaffold",
-                "validate-ads", "run", "scan"):
+    for cmd in ("money-sweep", "arbitrage", "scaffold", "validate-ads", "run", "scan"):
         try:
             out[cmd] = last_run(storage, cmd)
         except Exception:
@@ -111,7 +111,7 @@ def _money_sweep_7d_buckets() -> dict[str, int]:
     return buckets
 
 
-def _age_label(ts) -> str:                                                  # noqa: ANN001
+def _age_label(ts) -> str:  # noqa: ANN001
     if ts is None:
         return "never"
     s = int((datetime.now(UTC) - ts).total_seconds())
@@ -172,11 +172,7 @@ k3.metric(
     "Overlap (rows × ads)",
     sum(1 for r in rows if r.get("ad_overlap_count", 0) > 0),
 )
-avg_margin = (
-    round(sum(r["margin_pct"] for r in rows) / len(rows) * 100, 1)
-    if rows
-    else 0.0
-)
+avg_margin = round(sum(r["margin_pct"] for r in rows) / len(rows) * 100, 1) if rows else 0.0
 k4.metric("Avg margin %", f"{avg_margin:.1f}%")
 
 st.caption(f"Snapshot at {datetime.now(UTC):%Y-%m-%d %H:%M:%S UTC}")
@@ -189,24 +185,28 @@ if rows:
     df = pd.DataFrame(rows)
     # Surface overlap to the front so it's visible after sort
     front_cols = [
-        "label", "margin_pct", "retail_price", "supplier_cost",
-        "ad_overlap_count", "ad_overlap_niches", "ad_overlap_max_days",
-        "sku", "currency", "recorded_at",
+        "label",
+        "margin_pct",
+        "retail_price",
+        "supplier_cost",
+        "ad_overlap_count",
+        "ad_overlap_niches",
+        "ad_overlap_max_days",
+        "sku",
+        "currency",
+        "recorded_at",
     ]
     df = df[[c for c in front_cols if c in df.columns]]
     df["margin_pct"] = (df["margin_pct"] * 100).round(1)
 
-    gb = GridOptionsBuilder.from_dataframe(df)                            # type: ignore[arg-type]
+    gb = GridOptionsBuilder.from_dataframe(df)  # type: ignore[arg-type]
     gb.configure_side_bar()
     gb.configure_default_column(filter=True, sortable=True, resizable=True)
     gb.configure_pagination(paginationAutoPageSize=False)
     gb.configure_column(
         "ad_overlap_count",
         headerName="Ad hits",
-        cellStyle=(
-            {"function": "params.value > 0 ? "
-                         "{'backgroundColor': '#1b4332'} : None"}
-        ),
+        cellStyle=({"function": "params.value > 0 ? {'backgroundColor': '#1b4332'} : None"}),
     )
 
     AgGrid(
@@ -259,7 +259,7 @@ st.divider()
 if ads:
     st.subheader("Validated ads (≥ 30 days running)")
     df_ads = pd.DataFrame(ads)
-    gb = GridOptionsBuilder.from_dataframe(df_ads)                        # type: ignore[arg-type]
+    gb = GridOptionsBuilder.from_dataframe(df_ads)  # type: ignore[arg-type]
     gb.configure_side_bar()
     gb.configure_default_column(filter=True, sortable=True, resizable=True)
     AgGrid(
@@ -297,10 +297,7 @@ if last_runs:
         col.metric(
             label=f"{icon} {cmd}",
             value=_age_label(rec.get("started_at")),
-            delta=(
-                f"{rec.get('duration_ms', 0)}ms"
-                if rec.get("duration_ms") else "—"
-            ),
+            delta=(f"{rec.get('duration_ms', 0)}ms" if rec.get("duration_ms") else "—"),
             delta_color="off",
         )
 

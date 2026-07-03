@@ -10,6 +10,7 @@ Usage::
 
     maybe_alert_on_success_rate(storage, "scaffold", days=1, threshold=0.5)
 """
+
 from __future__ import annotations
 
 import json
@@ -40,9 +41,10 @@ def _send_discord(webhook: str, message: str) -> None:
     )
     try:
         urllib.request.urlopen(
-            req, timeout=(CONNECT_TIMEOUT_S, READ_TIMEOUT_S),
+            req,
+            timeout=(CONNECT_TIMEOUT_S, READ_TIMEOUT_S),
         )
-    except Exception as exc:                                                    # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         from trend_hunter.core.logging import get
 
         get().warning("discord alert failed: %s", exc)
@@ -59,16 +61,17 @@ def _send_telegram(token: str, chat_id: str, message: str) -> None:
     )
     try:
         urllib.request.urlopen(
-            req, timeout=(CONNECT_TIMEOUT_S, READ_TIMEOUT_S),
+            req,
+            timeout=(CONNECT_TIMEOUT_S, READ_TIMEOUT_S),
         )
-    except Exception as exc:                                                    # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         from trend_hunter.core.logging import get
 
         get().warning("telegram alert failed: %s", exc)
 
 
 # ── public helpers ─────────────────────────────────────────────────────────────
-def notify(                    # noqa: PLR0913
+def notify(  # noqa: PLR0913
     message: str,
     *,
     discord_webhook: str | None = None,

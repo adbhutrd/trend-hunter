@@ -21,6 +21,7 @@ The local catalog lives at `data/ads.json`:
   }
 ]
 """
+
 from __future__ import annotations
 
 import json
@@ -28,7 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-VALIDATED_DAYS_THRESHOLD = 30        # ≥ 30 days running ⇒ validated profit
+VALIDATED_DAYS_THRESHOLD = 30  # ≥ 30 days running ⇒ validated profit
 _REQUIRED_KEYS = ("creative_url", "advertiser", "niche", "days_running")
 
 
@@ -87,10 +88,7 @@ class AdsValidator:
 
     def validated(self) -> list[AdEvidence]:
         """Ads running ≥ 30 days — our 'validated profit' filter."""
-        return [
-            a for a in self._items
-            if a.days_running >= VALIDATED_DAYS_THRESHOLD
-        ]
+        return [a for a in self._items if a.days_running >= VALIDATED_DAYS_THRESHOLD]
 
     def matches_niche(self, niche: str) -> list[AdEvidence]:
         q = (niche or "").lower()

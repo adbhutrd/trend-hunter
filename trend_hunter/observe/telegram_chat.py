@@ -14,6 +14,7 @@ The bash wrapper still drives:
         3 → API error (``TelegramAPIError``)
         4 → no usable private chat (``NoPrivateMessageError``)
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -54,9 +55,7 @@ def extract_chat_id(data: dict[str, Any], existing: str = "") -> int:
     Caller is responsible for rate-limit handling and dispatch.
     """
     if not data.get("ok"):
-        raise TelegramAPIError(
-            "API error: " + (data.get("description") or "unknown")
-        )
+        raise TelegramAPIError("API error: " + (data.get("description") or "unknown"))
 
     updates: list[dict[str, Any]] = list(data.get("result") or [])
     existing_norm = str(existing).strip() if existing else ""

@@ -3,6 +3,7 @@
 IO validation (Pydantic, email format, URL parsing) happens at the adapter
 boundary, not here — keeping these types pure data with zero dependencies.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -30,10 +31,11 @@ class HealthState(StrEnum):
 @dataclass(frozen=True, slots=True)
 class RawSignal:
     """One observation from one scraper; the unit of ingest."""
-    source: str                # e.g. "shopify", "meta_ads", "reddit"
-    external_id: str           # e.g. shop product id, Reddit post id
+
+    source: str  # e.g. "shopify", "meta_ads", "reddit"
+    external_id: str  # e.g. shop product id, Reddit post id
     captured_at: datetime
-    payload: dict              # free-form, source-specific
+    payload: dict  # free-form, source-specific
 
     @property
     def key(self) -> tuple[str, str, datetime]:
@@ -55,6 +57,7 @@ class Product:
 @dataclass(frozen=True, slots=True)
 class Lead:
     """B2B lead — GDPR-safe (business emails only)."""
+
     domain: str
     company_name: str
     contact_email: str | None
@@ -71,28 +74,30 @@ class Forecast:
     point_estimate: float
     lower_80: float
     upper_80: float
-    confidence: float                # 0..1
+    confidence: float  # 0..1
 
 
 @dataclass(frozen=True, slots=True)
 class Money:
     """Arbitrage summary for one product."""
+
     sku: str
     retail_price: float
     supplier_cost: float
     shipping_cost: float
     cac_estimate: float
-    margin_pct: float                # 0..1
+    margin_pct: float  # 0..1
     currency: str
 
 
 @dataclass(frozen=True, slots=True)
 class Health:
     """Per-source health snapshot."""
+
     source: str
     state: HealthState
     last_run: datetime | None
     last_ok: datetime | None
-    rows_in: int                     # cumulative
-    error_rate: float                # 0..1
+    rows_in: int  # cumulative
+    error_rate: float  # 0..1
     detail: str

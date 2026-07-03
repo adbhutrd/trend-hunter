@@ -3,6 +3,7 @@
 Convention: `_ts(N)` returns `now - N days`. So `[ _ts(6-i) for i in range(7) ]`
 gives timestamps in chronological ASCENDING order when iterated in order.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

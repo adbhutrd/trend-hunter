@@ -10,12 +10,23 @@ Usage::
 
 # Commands the report treats as "core" — others go in the bottom panel.
 CORE_COMMANDS = (
-    "scan", "run", "aggregate", "arbitrage", "scaffold",
-    "money-sweep", "forget", "validate-ads",
+    "scan",
+    "run",
+    "aggregate",
+    "arbitrage",
+    "scaffold",
+    "money-sweep",
+    "forget",
+    "validate-ads",
 )
 
 # Counters the report reads from the ``counters`` JSON column.
 COUNTER_KEYS = (
-    "products_in", "classified", "leads_added",
-    "money_rows", "scaffolded", "audits", "validated",
+    "products_in",
+    "classified",
+    "leads_added",
+    "money_rows",
+    "scaffolded",
+    "audits",
+    "validated",
 )

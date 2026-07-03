@@ -2,6 +2,7 @@
 
 Uses the shared ``storage`` fixture.
 """
+
 from __future__ import annotations
 
 from trend_hunter.observe.corrective_actions import (
@@ -63,8 +64,7 @@ def test_resolve_action_marks_resolved(storage):
     resolve_action(storage, aid, outcome="resolved", outcome_detail="proxy rotated successfully")
 
     rows = storage.query(
-        "SELECT outcome, outcome_detail, resolved_at "
-        "FROM corrective_actions WHERE action_id = ?",
+        "SELECT outcome, outcome_detail, resolved_at FROM corrective_actions WHERE action_id = ?",
         (aid,),
     )
     assert rows[0]["outcome"] == "resolved"
@@ -74,8 +74,12 @@ def test_resolve_action_marks_resolved(storage):
 
 def test_recent_actions_returns_all(storage):
     """recent_actions returns all rows within the lookback window."""
-    record_action(storage, trigger_cmd="scan", trigger_metric="err", trigger_value="1", action_taken="fix")
-    record_action(storage, trigger_cmd="run", trigger_metric="err", trigger_value="1", action_taken="fix2")
+    record_action(
+        storage, trigger_cmd="scan", trigger_metric="err", trigger_value="1", action_taken="fix"
+    )
+    record_action(
+        storage, trigger_cmd="run", trigger_metric="err", trigger_value="1", action_taken="fix2"
+    )
 
     rows = recent_actions(storage, days=7)
     assert len(rows) >= 2
@@ -83,8 +87,22 @@ def test_recent_actions_returns_all(storage):
 
 def test_recent_actions_filters_by_outcome(storage):
     """recent_actions filters by outcome when given."""
-    record_action(storage, trigger_cmd="scan", trigger_metric="err", trigger_value="1", action_taken="a", outcome="resolved")
-    record_action(storage, trigger_cmd="scan", trigger_metric="err", trigger_value="1", action_taken="b", outcome="failed")
+    record_action(
+        storage,
+        trigger_cmd="scan",
+        trigger_metric="err",
+        trigger_value="1",
+        action_taken="a",
+        outcome="resolved",
+    )
+    record_action(
+        storage,
+        trigger_cmd="scan",
+        trigger_metric="err",
+        trigger_value="1",
+        action_taken="b",
+        outcome="failed",
+    )
 
     resolved = recent_actions(storage, days=7, outcome="resolved")
     assert all(r["outcome"] == "resolved" for r in resolved)
@@ -99,9 +117,30 @@ def test_auto_playbook_suggestions_empty(storage):
 
 def test_auto_playbook_suggestions_groups(storage):
     """auto_playbook_suggestions groups by (trigger_cmd, action_taken, outcome)."""
-    record_action(storage, trigger_cmd="scaffold", trigger_metric="sr", trigger_value="0.3", action_taken="rotate proxy", outcome="resolved")
-    record_action(storage, trigger_cmd="scaffold", trigger_metric="sr", trigger_value="0.3", action_taken="rotate proxy", outcome="resolved")
-    record_action(storage, trigger_cmd="scaffold", trigger_metric="sr", trigger_value="0.3", action_taken="restart vpn", outcome="failed")
+    record_action(
+        storage,
+        trigger_cmd="scaffold",
+        trigger_metric="sr",
+        trigger_value="0.3",
+        action_taken="rotate proxy",
+        outcome="resolved",
+    )
+    record_action(
+        storage,
+        trigger_cmd="scaffold",
+        trigger_metric="sr",
+        trigger_value="0.3",
+        action_taken="rotate proxy",
+        outcome="resolved",
+    )
+    record_action(
+        storage,
+        trigger_cmd="scaffold",
+        trigger_metric="sr",
+        trigger_value="0.3",
+        action_taken="restart vpn",
+        outcome="failed",
+    )
 
     suggestions = auto_playbook_suggestions(storage, days=7)
     assert len(suggestions) == 2  # 2 distinct groups
@@ -121,12 +160,13 @@ def test_auto_trigger_noop_when_healthy(storage):
 def test_auto_trigger_creates_action_on_low_rate(storage):
     """auto_trigger records a corrective action when rate is below threshold."""
     # No runs exist → success_rate is 0% → below threshold 0.5
-    aid = auto_trigger(storage, trigger_cmd="scaffold", threshold=0.5, default_action="investigate immediately")
+    aid = auto_trigger(
+        storage, trigger_cmd="scaffold", threshold=0.5, default_action="investigate immediately"
+    )
     assert aid is not None
 
     rows = storage.query(
-        "SELECT action_id, trigger_cmd, action_taken "
-        "FROM corrective_actions WHERE action_id = ?",
+        "SELECT action_id, trigger_cmd, action_taken FROM corrective_actions WHERE action_id = ?",
         (aid,),
     )
     assert len(rows) == 1

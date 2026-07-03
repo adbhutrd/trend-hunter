@@ -1,4 +1,5 @@
 """Unit tests for AdsValidator (the ≥30-day-running filter)."""
+
 from __future__ import annotations
 
 import json
@@ -18,14 +19,31 @@ def test_validator_empty_when_no_file(tmp_path):
 def test_validator_filters_to_validated_only(tmp_path):
     p = tmp_path / "ads.json"
     p.write_text(
-        json.dumps([
-            {"creative_url": "u1", "advertiser": "A", "niche": "lamp",
-             "days_running": 60, "source": "manual"},
-            {"creative_url": "u2", "advertiser": "B", "niche": "lamp",
-             "days_running": 14, "source": "manual"},
-            {"creative_url": "u3", "advertiser": "C", "niche": "desk",
-             "days_running": 31, "source": "manual"},
-        ])
+        json.dumps(
+            [
+                {
+                    "creative_url": "u1",
+                    "advertiser": "A",
+                    "niche": "lamp",
+                    "days_running": 60,
+                    "source": "manual",
+                },
+                {
+                    "creative_url": "u2",
+                    "advertiser": "B",
+                    "niche": "lamp",
+                    "days_running": 14,
+                    "source": "manual",
+                },
+                {
+                    "creative_url": "u3",
+                    "advertiser": "C",
+                    "niche": "desk",
+                    "days_running": 31,
+                    "source": "manual",
+                },
+            ]
+        )
     )
     v = AdsValidator(p)
     assert len(v.all()) == 3
@@ -36,12 +54,24 @@ def test_validator_filters_to_validated_only(tmp_path):
 def test_validator_matches_niche(tmp_path):
     p = tmp_path / "ads.json"
     p.write_text(
-        json.dumps([
-            {"creative_url": "u1", "advertiser": "A", "niche": "desk lamp",
-             "days_running": 45, "source": "manual"},
-            {"creative_url": "u2", "advertiser": "B", "niche": "yoga mat",
-             "days_running": 60, "source": "manual"},
-        ])
+        json.dumps(
+            [
+                {
+                    "creative_url": "u1",
+                    "advertiser": "A",
+                    "niche": "desk lamp",
+                    "days_running": 45,
+                    "source": "manual",
+                },
+                {
+                    "creative_url": "u2",
+                    "advertiser": "B",
+                    "niche": "yoga mat",
+                    "days_running": 60,
+                    "source": "manual",
+                },
+            ]
+        )
     )
     v = AdsValidator(p)
     assert {a.advertiser for a in v.matches_niche("lamp")} == {"A"}
@@ -51,15 +81,32 @@ def test_validator_matches_niche(tmp_path):
 def test_validator_skips_malformed_entries(tmp_path):
     p = tmp_path / "ads.json"
     p.write_text(
-        json.dumps([
-            {"creative_url": "u1", "advertiser": "A", "niche": "lamp",
-             "days_running": 60, "source": "manual"},
-            {"creative_url": "u2"},                  # missing keys
-            {"creative_url": "u3", "advertiser": "C", "niche": "lamp",
-             "days_running": "not-a-number", "source": "manual"},
-            {"creative_url": "u4", "advertiser": "D", "niche": "lamp",
-             "days_running": 40, "source": "manual"},
-        ])
+        json.dumps(
+            [
+                {
+                    "creative_url": "u1",
+                    "advertiser": "A",
+                    "niche": "lamp",
+                    "days_running": 60,
+                    "source": "manual",
+                },
+                {"creative_url": "u2"},  # missing keys
+                {
+                    "creative_url": "u3",
+                    "advertiser": "C",
+                    "niche": "lamp",
+                    "days_running": "not-a-number",
+                    "source": "manual",
+                },
+                {
+                    "creative_url": "u4",
+                    "advertiser": "D",
+                    "niche": "lamp",
+                    "days_running": 40,
+                    "source": "manual",
+                },
+            ]
+        )
     )
     v = AdsValidator(p)
     # Skips 2 malformed, keeps 2 valid

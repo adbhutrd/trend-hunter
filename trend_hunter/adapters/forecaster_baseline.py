@@ -8,6 +8,7 @@ Phase 1 forecaster. Implements core.ports.Forecaster.
 Phase 3 will swap this for `ruptures` change-point + Prophet gating;
 the Protocol seam in core/ports.Forecaster makes that a 1-file swap.
 """
+
 from __future__ import annotations
 
 import statistics
@@ -49,13 +50,13 @@ class BaselineForecaster:
 
         # Rolling std-dev as a proxy for the 80% CI (no bootstrap needed).
         stdev = statistics.pstdev(ys) if len(ys) >= 2 else 0.0
-        z = 1.2816                              # 80% two-sided normal quantile
+        z = 1.2816  # 80% two-sided normal quantile
         half_width = z * stdev
 
         # Confidence grows with sample size; saturates at 30 points.
         confidence = min(1.0, len(ys) / 30.0)
 
-        sku_seed = pts[-1][0].isoformat()       # deterministic but cheap
+        sku_seed = pts[-1][0].isoformat()  # deterministic but cheap
         return Forecast(
             sku=sku_seed,
             horizon_days=horizon_days,

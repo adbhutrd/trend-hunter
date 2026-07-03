@@ -11,6 +11,7 @@ Comprehensive matrix of branches in ``extract_chat_id``:
 * ``existing`` mismatch falls through to the latest private non-bot
 * chat_id type coercion: Telegram can emit int or str; output always int
 """
+
 from __future__ import annotations
 
 import pytest
@@ -110,20 +111,26 @@ def test_single_private_message_returns_chat_id():
 
 def test_multiple_messages_pick_latest_user_chat():
     """3 user messages → returns the LATEST (reversed iteration)."""
-    data = {"ok": True, "result": [
-        _private_msg(100),
-        _private_msg(200),
-        _private_msg(300),  # newest
-    ]}
+    data = {
+        "ok": True,
+        "result": [
+            _private_msg(100),
+            _private_msg(200),
+            _private_msg(300),  # newest
+        ],
+    }
     assert extract_chat_id(data) == 300
 
 
 def test_skips_bot_message_in_latest_slot():
     """Latest update is a bot; earlier update is a real user → picks user."""
-    data = {"ok": True, "result": [
-        _private_msg(777),                          # older, real user
-        _private_msg(999, sender_is_bot=True),      # newer, bot
-    ]}
+    data = {
+        "ok": True,
+        "result": [
+            _private_msg(777),  # older, real user
+            _private_msg(999, sender_is_bot=True),  # newer, bot
+        ],
+    }
     assert extract_chat_id(data) == 777
 
 
@@ -180,12 +187,16 @@ def test_existing_empty_string_treated_as_unset():
 
 def test_chat_id_string_input_returns_int():
     """Telegram emits `id` as int; pass it through.  String fallback → int."""
-    updates = [{"message": {
-        "message_id": 1,
-        "from": {"id": 22, "is_bot": False, "first_name": "u"},
-        "chat": {"id": "8888", "type": "private"},  # string!
-        "text": "hi",
-    }}]
+    updates = [
+        {
+            "message": {
+                "message_id": 1,
+                "from": {"id": 22, "is_bot": False, "first_name": "u"},
+                "chat": {"id": "8888", "type": "private"},  # string!
+                "text": "hi",
+            }
+        }
+    ]
     assert extract_chat_id({"ok": True, "result": updates}) == 8888
     assert isinstance(extract_chat_id({"ok": True, "result": updates}), int)
 

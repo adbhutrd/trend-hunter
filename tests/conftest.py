@@ -3,6 +3,7 @@
 * One temp DuckDB per test (`tmp_path` fixture)
 * Reset Settings cache between tests (env variables stick around)
 """
+
 from __future__ import annotations
 
 from pathlib import Path
