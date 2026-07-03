@@ -70,6 +70,44 @@ strict = true
 warn_unused_ignores = true
 disallow_untyped_defs = true
 
+[tool.coverage.run]
+# `branch = true` enables branch coverage so short-circuited if/else arms
+# show up in the report even when the whole `if` line is hit.
+branch = true
+source = ["trend_hunter"]
+# `__main__.py` is invocation glue — no testable surface. Skipping it so
+# the bar reflects testable library code, not entry-point boilerplate.
+omit = ["trend_hunter/__main__.py"]
+
+[tool.coverage.report]
+# Don't omit fully-covered files from the report — every untested line is
+# a real gap, not a tooling artifact. `exclude_lines` lists common
+# patterns where coverage.py should not flag a line as missing.
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "\\.\\.\\.",
+    "raise NotImplementedError",
+]
+sort = "Cover"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = [
+    # Coverage is enabled by default for `pytest`; CI gets the same view.
+    # Floor of 30% sits 3.46pp below the actual measured branch-coverage
+    # baseline (33.46%):
+    #   - ≈35% line-only baseline (before branch coverage was enabled)
+    #   - 33.46% branch-coverage baseline (with [tool.coverage.run]
+    #     branch = true — typical 2-15pp drop from enabling branch
+    #     coverage; a small swing is expected and acceptable)
+    # Ratchet up over time as test-coverage of cli/flows/scripts/UI
+    # improves.
+    "--cov=trend_hunter",
+    "--cov-report=term-missing",
+    "--cov-fail-under=30",
+]
