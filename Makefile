@@ -10,7 +10,7 @@ PIP        := $(VENV)/bin/pip
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init install run scan doctor aggregate backup dashboard test lint clean money money-cycle forecast arbitrage scaffold ads loop-report migrate calibrate alert docs
+.PHONY: help init install run scan doctor aggregate backup dashboard test lint clean money money-cycle forecast arbitrage scaffold ads loop-report migrate calibrate calibrate-backfill alert docs
 
 help: ## show this help
 	@awk 'BEGIN {FS = ":.*?## "; printf "Usage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} \
@@ -74,6 +74,9 @@ calibrate: migrate ## forecast back-testing MAPE summary
 
 calibrate-list: migrate ## list pending calibrations awaiting actual prices
 	$(VENV_PY) -m trend_hunter.cli calibrate list --days 30
+
+calibrate-backfill: migrate ## resolve overdue calibrations one-shot (auto-resolve leg)
+	$(VENV_PY) -m trend_hunter.cli calibrate backfill --days 30
 
 alert: ## check success rates and push notifications if degraded
 	$(VENV_PY) -m trend_hunter.cli alert

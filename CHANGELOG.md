@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 5 new CLI subcommands: `forecast`, `arbitrage`, `validate-ads`, `scaffold --top 3 [--live]`, `money-sweep`, `schedule`
 - 4 new Makefile targets: `forecast`, `arbitrage`, `ads`, `scaffold`, `money`, `money-cycle`
 - 4 new test files: `test_forecaster.py`, `test_arbitrage.py`, `test_scaffold.py`, `test_ads_validator.py`
+- **Forecast back-test leg of the loop** (closes the gap flagged in `docs/LOOP_ENGINEERING.md`)
+  - `observe/calibrate.auto_resolve_calibrations(storage, days_lookback=30, dry_run=False)` — finds overdue pending calibrations and resolves them against the `products` table by matching `calibrate.sku ↔ products.external_id` (most recent post-forecast price). Idempotent (re-running on resolved rows is a no-op); dry-run mode reports counts without writing.
+  - `intelligence/aggregator.aggregate()` now calls `auto_resolve_calibrations()` after building roll-ups, so every nightly `make run` quietly settles anything that's become due.
+  - New CLI subcommand: `calibrate backfill [--days N] [--dry]` — one-shot wrapper for explicit rescues.
+  - New Makefile target `calibrate-backfill` (defaults to days=30).
+  - New `COUNTER_KEYS` entry `calibrations_resolved` — surfaces in `loop-report` automatically.
+  - 5 new test cases in `tests/test_calibrate.py`: overdue-pickup, idempotency, dry-run non-write, missing-match no-crash, pre-horizon skip.
 
 ### Changed
 

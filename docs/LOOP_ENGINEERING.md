@@ -98,10 +98,18 @@ this checklist:
 
 ## What we don't (yet) measure honestly
 
-- **Forecast back-test** — `forecasts` table captures predictions
-  but we don't yet join them against actual price 7 days later.
-  Tracked as a follow-up.
 - **Calibration of "rising" labels** — classifier hasn't logged
   whether its predictions later held. Tracked as a follow-up.
 - **Ad spend attribution** — `data/ads.json` is a curated catalog;
   no real Meta API spend signal yet.
+
+### ✅ Forecast back-test (closed)
+
+`observe/calibrate.auto_resolve_calibrations(storage, days_lookback=30,
+dry_run=False)` runs at the end of every `aggregate()`. It picks up
+every pending `calibrate` row whose horizon has elapsed, joins
+`calibrate.sku ↔ products.external_id`, and writes the most recent
+post-forecast price via the existing `update_actual()` helper. The
+resolved rows then feed `calibration_summary()` so `loop-report`
+surfaces MAPE/MAE automatically. `make calibrate-backfill` is the
+explicit one-shot escape hatch (with `--dry` for safe preview).

@@ -72,6 +72,7 @@ def _cmd_run(_args: argparse.Namespace) -> None:
             {
                 "products_in": int(scan_summary.get("total", 0)),
                 "classified": int(n),
+                "calibrations_resolved": int(agg.get("calibrations_resolved", 0)),
             }
         )
     rc = doctor()
@@ -85,7 +86,12 @@ def _cmd_aggregate(_args: argparse.Namespace) -> None:
     with _open_writer() as storage, record_run("aggregate", storage=storage) as rec:
         out = aggregate(storage)
         n = classify_all(storage)
-        rec.set_counters({"classified": int(n)})
+        rec.set_counters(
+            {
+                "classified": int(n),
+                "calibrations_resolved": int(out.get("calibrations_resolved", 0)),
+            }
+        )
     get().info(f"aggregate: {out}; classified={n}")
 
 
@@ -251,6 +257,20 @@ def _cmd_calibrate(args: argparse.Namespace) -> None:
             print(
                 f"  calibration {args.calibrate_id[:8]} updated: actual=${float(args.actual_price):.2f}"
             )
+        elif sub == "backfill":
+            from trend_hunter.observe.calibrate import auto_resolve_calibrations
+
+            dry = bool(getattr(args, "dry", False))
+            with _open_writer() as storage_w:
+                out = auto_resolve_calibrations(
+                    storage_w,
+                    days_lookback=int(args.days),
+                    dry_run=dry,
+                )
+            print(f"  calibrate backfill (last {args.days}d, dry_run={dry}):")
+            print(f"    total pending = {out['total']}")
+            print(f"    resolved      = {out['resolved']}")
+            print(f"    skipped       = {out['skipped']}")
         else:
             from trend_hunter.observe.calibrate import calibration_summary
 
@@ -481,9 +501,14 @@ def build_parser() -> argparse.ArgumentParser:
     calp.add_argument(
         "calibrate_cmd",
         nargs="?",
-        choices=("list", "update", "summary"),
+        choices=("list", "update", "summary", "backfill"),
         default="summary",
-        help="list pending, update actual, or show MAPE summary",
+        help="list pending, update actual, show MAPE summary, or backfill overdue rows",
+    )
+    calp.add_argument(
+        "--dry",
+        action="store_true",
+        help="with `backfill`: report counts without writing to calibrate",
     )
     calp.add_argument("--days", type=int, default=7, help="lookback window (default 7)")
     calp.add_argument("calibrate_id", nargs="?", help="calibrate_id for 'update' subcommand")

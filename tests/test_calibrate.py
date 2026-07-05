@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from trend_hunter.observe.calibrate import (
+    auto_resolve_calibrations,
     calibration_summary,
     pending_calibrations,
     record_calibration,
@@ -128,3 +129,99 @@ def test_calibration_summary_computes_mape(storage):
     assert summary["count"] == 2
     # MAPE = (|0.20| + |-0.10|) / 2 * 100 = (0.20 + 0.10) / 2 * 100 = 15.0%
     assert summary["mape_pct"] == pytest.approx(15.0)
+
+
+# ── auto_resolve_calibrations — the forecast back-test leg ────────────────────
+def test_auto_resolve_picks_up_overdue(storage):
+    """A backdated overdue forecast with a matching product resolves."""
+    # Backdate by 15 days; horizon default = 14 → overdue.
+    storage.execute(
+        "INSERT INTO calibrate "
+        "(calibrate_id, sku, ts_forecast, predicted_price, horizon_days, source_command) "
+        "VALUES ('cid-1', 'sku-A', current_timestamp - INTERVAL 15 DAY, "
+        "20.00, 14, 'forecast')",
+    )
+    # A fresh product observation matching the SKU.
+    storage.execute(
+        "INSERT INTO products (source, external_id, captured_at, price) "
+        "VALUES ('shopify', 'sku-A', current_timestamp, 24.00)",
+    )
+    out = auto_resolve_calibrations(storage, days_lookback=30)
+    assert out == {"resolved": 1, "skipped": 0, "total": 1}
+    row = storage.query(
+        "SELECT actual_price, error_pct FROM calibrate WHERE calibrate_id = 'cid-1'",
+    )[0]
+    assert float(row["actual_price"]) == pytest.approx(24.00)
+    # error_pct = (24 - 20) / 20 = 0.20
+    assert float(row["error_pct"]) == pytest.approx(0.20)
+
+
+def test_auto_resolve_idempotent(storage):
+    """Re-running picks up zero — already-resolved rows are skipped by SQL."""
+    storage.execute(
+        "INSERT INTO calibrate "
+        "(calibrate_id, sku, ts_forecast, predicted_price, horizon_days) "
+        "VALUES ('cid-i', 'sku-B', current_timestamp - INTERVAL 15 DAY, "
+        "10.00, 14)",
+    )
+    storage.execute(
+        "INSERT INTO products (source, external_id, captured_at, price) "
+        "VALUES ('shopify', 'sku-B', current_timestamp, 12.00)",
+    )
+    out1 = auto_resolve_calibrations(storage, days_lookback=30)
+    out2 = auto_resolve_calibrations(storage, days_lookback=30)
+    assert out1["resolved"] == 1
+    # The WHERE actual_price IS NULL predicate excludes it the second time.
+    assert out2 == {"resolved": 0, "skipped": 0, "total": 0}
+
+
+def test_auto_resolve_dry_run_does_not_write(storage):
+    """dry_run=True reports counts but leaves the row pending."""
+    storage.execute(
+        "INSERT INTO calibrate "
+        "(calibrate_id, sku, ts_forecast, predicted_price, horizon_days) "
+        "VALUES ('cid-d', 'sku-D', current_timestamp - INTERVAL 15 DAY, "
+        "10.00, 14)",
+    )
+    storage.execute(
+        "INSERT INTO products (source, external_id, captured_at, price) "
+        "VALUES ('shopify', 'sku-D', current_timestamp, 12.00)",
+    )
+    out = auto_resolve_calibrations(storage, days_lookback=30, dry_run=True)
+    assert out == {"resolved": 1, "skipped": 0, "total": 1}
+    row = storage.query(
+        "SELECT actual_price FROM calibrate WHERE calibrate_id = 'cid-d'",
+    )[0]
+    assert row["actual_price"] is None
+
+
+def test_auto_resolve_skips_missing_match(storage):
+    """Overdue forecast whose SKU has no matching product is skipped, not crashed."""
+    storage.execute(
+        "INSERT INTO calibrate "
+        "(calibrate_id, sku, ts_forecast, predicted_price, horizon_days) "
+        "VALUES ('cid-s', 'forecast-smoke', "
+        "current_timestamp - INTERVAL 15 DAY, 10.00, 14)",
+    )
+    out = auto_resolve_calibrations(storage, days_lookback=30)
+    assert out == {"resolved": 0, "skipped": 1, "total": 1}
+    # Row is still NULL — we don't crash, we just don't claim an actual.
+    row = storage.query(
+        "SELECT actual_price FROM calibrate WHERE calibrate_id = 'cid-s'",
+    )[0]
+    assert row["actual_price"] is None
+
+
+def test_auto_resolve_ignores_pre_horizon_rows(storage):
+    """Forecasts that haven't reached their horizon yet are not touched."""
+    storage.execute(
+        "INSERT INTO calibrate "
+        "(calibrate_id, sku, ts_forecast, predicted_price, horizon_days) "
+        "VALUES ('cid-future', 'sku-Z', current_timestamp, 10.00, 14)",
+    )
+    storage.execute(
+        "INSERT INTO products (source, external_id, captured_at, price) "
+        "VALUES ('shopify', 'sku-Z', current_timestamp, 11.00)",
+    )
+    out = auto_resolve_calibrations(storage, days_lookback=30)
+    assert out == {"resolved": 0, "skipped": 0, "total": 0}

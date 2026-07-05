@@ -15,13 +15,25 @@ from loguru import logger
 
 from trend_hunter.adapters.storage_duckdb import DuckDBStorage
 from trend_hunter.intelligence.classifier import classify_one
+from trend_hunter.observe.calibrate import auto_resolve_calibrations
 
 
 # ── aggregates ───────────────────────────────────────────────────────────────
 def aggregate(storage: DuckDBStorage) -> dict:
     """Build the dashboard tables from raw rows.
 
-    Idempotent — running twice produces the same state for the same source data.
+    Idempotent — running twice produces the same state for the same source
+    data.  Side-effect: on every call, after building roll-up tables, also
+    auto-resolves any forecast calibrations that have passed their horizon
+    (see :func:`trend_hunter.observe.calibrate.auto_resolve_calibrations`).
+    The number resolved is returned as ``calibrations_resolved`` so callers
+    can surface it in the ``run_history`` counter JSON.
+
+    Returns
+    -------
+    dict
+        ``{"ran_at": str, "products": int, "sources": int,
+        "calibrations_resolved": int}``
     """
     c = storage.conn()
     now = datetime.now(UTC)
@@ -89,11 +101,20 @@ def aggregate(storage: DuckDBStorage) -> dict:
         """,
     )
 
-    logger.info(f"aggregator: built 3 roll-up tables at {now.isoformat()}")
+    logger.info(
+        f"aggregator: built 3 roll-up tables at {now.isoformat()}; "
+        f"now auto-resolving overdue calibrations",
+    )
+    resolved = auto_resolve_calibrations(storage)
+    logger.info(
+        f"auto-resolved {resolved['resolved']} calibration(s) "
+        f"({resolved['skipped']} skipped)",
+    )
     return {
         "ran_at": now.isoformat(),
         "products": c.execute("SELECT count(*) FROM agg_product_status").fetchone()[0],
         "sources": c.execute("SELECT count(*) FROM agg_source_health").fetchone()[0],
+        "calibrations_resolved": resolved["resolved"],
     }
 
 

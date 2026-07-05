@@ -29,4 +29,5 @@ COUNTER_KEYS = (
     "scaffolded",
     "audits",
     "validated",
+    "calibrations_resolved",
 )
