@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     log_dir: Path = Field(default=Path("./data/logs"))
 
     # ── scheduling ──
-    scan_interval_minutes: int = 120
+    scan_interval_minutes: int = 30
     aggregate_hour: int = 3
 
     # ── dashboard ──
@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     discord_webhook: str | None = None
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
+
+    # ── eBay API (optional — enables Browse API scraper) ──
+    ebay_client_id: str | None = None
+    ebay_client_secret: str | None = None
 
     # ── outbound mail (optional) ──
     gmail_address: str | None = None

@@ -29,6 +29,7 @@ from pathlib import Path
 
 from trend_hunter.core.config import get_settings
 from trend_hunter.core.logging import configure, get
+from trend_hunter.intelligence.patterns import detect_multi_timeframe_pattern, detect_pattern
 from trend_hunter.observe.run_ledger import record_run
 
 
@@ -56,9 +57,10 @@ def _cmd_scan(_args: argparse.Namespace) -> None:
 
 
 def _cmd_run(_args: argparse.Namespace) -> None:
-    """scan + classify + aggregate + doctor — single writer session + read-only doctor."""
+    """scan + classify + aggregate + ML forecast + doctor — single writer session + read-only doctor."""
     from trend_hunter.ingest.runner import run_once
     from trend_hunter.intelligence.aggregator import aggregate, classify_all
+    from trend_hunter.intelligence.ml_forecaster import run_ml_forecast
     from trend_hunter.scripts.doctor import doctor
 
     log = get()
@@ -66,13 +68,17 @@ def _cmd_run(_args: argparse.Namespace) -> None:
         scan_summary = asyncio.run(run_once(storage))
         log.info(f"scan summary: {scan_summary}")
         agg = aggregate(storage)
-        n = classify_all(storage)
-        log.info(f"aggregate: {agg}; classified={n}")
+        cls = classify_all(storage)
+        log.info(f"aggregate: {agg}; classified={cls}")
+        ml_result = run_ml_forecast(storage)
+        log.info(f"ml_forecast: {ml_result}")
         rec.set_counters(
             {
                 "products_in": int(scan_summary.get("total", 0)),
-                "classified": int(n),
+                "classified": int(cls["products"]),
+                "snapshots": int(cls["snapshots"]),
                 "calibrations_resolved": int(agg.get("calibrations_resolved", 0)),
+                "ml_predictions": int(ml_result.get("predictions", 0)),
             }
         )
     rc = doctor()
@@ -85,14 +91,15 @@ def _cmd_aggregate(_args: argparse.Namespace) -> None:
 
     with _open_writer() as storage, record_run("aggregate", storage=storage) as rec:
         out = aggregate(storage)
-        n = classify_all(storage)
+        cls = classify_all(storage)
         rec.set_counters(
             {
-                "classified": int(n),
+                "classified": int(cls["products"]),
+                "snapshots": int(cls["snapshots"]),
                 "calibrations_resolved": int(out.get("calibrations_resolved", 0)),
             }
         )
-    get().info(f"aggregate: {out}; classified={n}")
+    get().info(f"aggregate: {out}; classified={cls}")
 
 
 def _cmd_doctor(_args: argparse.Namespace) -> None:
@@ -299,6 +306,55 @@ def _cmd_alert(_args: argparse.Namespace) -> None:
         print("  all core commands healthy (no alerts sent)")
 
 
+def _cmd_pattern_alerts(_args: argparse.Namespace) -> None:
+    """Check cross-timeframe pattern transitions and alert on breakout/accelerating."""
+    from trend_hunter.observe.pattern_alerts import check_pattern_alerts
+
+    with _open_writer() as storage:
+        summary = check_pattern_alerts(storage)
+    print(f"  checked {summary['checked']} product(s)")
+    if summary["alerted"]:
+        print(f"  🚀 alerted on {summary['alerted']} new breakout/accelerating product(s):")
+        for p in summary["patterns"]:
+            print(f"    • {p['pattern']} — {p['title']} ({p['source']}/{p['external_id']})")
+    else:
+        print("  no new breakout/accelerating transitions (no alerts sent)")
+
+
+# ── store discovery ──────────────────────────────────────────────────────────
+def _cmd_discover(args: argparse.Namespace) -> None:
+    """Discover new Shopify stores and add them to sources.json."""
+    from trend_hunter.adapters.store_hunter import StoreHunter
+
+    async def _run():
+        hunter = StoreHunter()
+        if args.url:
+            result = await hunter.discover_single(args.url)
+            if result["valid"]:
+                print(f"  ✅ {result['url']} — {result['reason']}")
+                if result["added"]:
+                    print("     Added to sources.json!")
+                else:
+                    print("     Already in sources.json.")
+            else:
+                print(f"  ❌ {result['url']} — {result['reason']}")
+            return
+
+        result = await hunter.discover()
+        print("\n  📊 Store Discovery Results:")
+        print(f"     Checked:  {result['total_checked']} stores")
+        print(f"     Valid:    {result['valid']} stores")
+        print(f"     New:      {result['new']} stores")
+        print(f"     Removed:  {result['removed']} stores")
+        if result.get("new_stores"):
+            print("\n  🆕 New stores discovered:")
+            for s in result["new_stores"]:
+                print(f"     • {s}")
+
+    import asyncio
+    asyncio.run(_run())
+
+
 # ── run chaining helpers ─────────────────────────────────────────────────────
 def _chain_loop_report() -> None:
     """Auto-run loop-report after money-sweep."""
@@ -448,6 +504,94 @@ def _cmd_loop_report(args: argparse.Namespace) -> None:
     _chain_alerts()
 
 
+def _cmd_trends(args: argparse.Namespace) -> None:
+    """Live historical trend report — detect patterns across multiple windows."""
+    from trend_hunter.intelligence.patterns import (
+        build_cross_timeframe_snapshots,
+        group_snapshots_by_timeframe,
+    )
+
+    days = int(args.days)
+    # Use a writer so record_run can log this invocation to run_history.
+    with _open_writer() as storage, record_run("trends", storage=storage) as rec:
+        rows = storage.query(
+            f"""
+            SELECT source, external_id, title, status, slope_pct_per_day,
+                   n_points, window_start, window_end, timeframe_days
+            FROM trend_history
+            WHERE window_end >= now() - INTERVAL {int(days)} DAY
+            ORDER BY source, external_id, timeframe_days, window_end ASC
+            """,
+        )
+
+        # Per-timeframe historical patterns.
+        by_tf = group_snapshots_by_timeframe(rows)
+        patterns: list[dict] = []
+        for (source, external_id, tf), hist in by_tf.items():
+            pattern = detect_pattern(hist)
+            if pattern:
+                latest = hist[-1]
+                patterns.append(
+                    {
+                        "source": source,
+                        "external_id": external_id,
+                        "title": latest.get("title") or external_id,
+                        "timeframe_days": tf,
+                        "pattern": pattern,
+                        "status": latest.get("status", "unknown"),
+                        "slope_pct_per_day": latest.get("slope_pct_per_day", 0.0),
+                    }
+                )
+
+        # Cross-timeframe patterns.
+        cross_groups = build_cross_timeframe_snapshots(rows)
+        cross_patterns: list[dict] = []
+        for snapshots in cross_groups:
+            pattern = detect_multi_timeframe_pattern(snapshots)
+            if pattern:
+                latest = snapshots[-1]
+                cross_patterns.append(
+                    {
+                        "source": latest["source"],
+                        "external_id": latest["external_id"],
+                        "title": latest.get("title") or latest["external_id"],
+                        "timeframe_days": 0,
+                        "pattern": pattern,
+                        "status": latest.get("status", "unknown"),
+                        "slope_pct_per_day": latest.get("slope_pct_per_day", 0.0),
+                    }
+                )
+
+        rec.set_counters({"patterns_found": len(patterns) + len(cross_patterns)})
+
+    unique_products = len({(r["source"], r["external_id"]) for r in rows})
+    print(f"  Per-timeframe patterns (last {days} days):")
+    print(
+        f"  {'Pattern':<18} {'TF':>4} {'Status':<10} {'Slope/day':>10}  Product"
+    )
+    print("  " + "-" * 75)
+    for p in sorted(patterns, key=lambda x: (x["pattern"], -x["timeframe_days"])):
+        slope = float(p["slope_pct_per_day"] or 0.0) * 100
+        print(
+            f"  {p['pattern']:<18} {p['timeframe_days']:>3}d "
+            f"{p['status']:<10} {slope:>+9.2f}%  {p['title'][:40]}"
+        )
+
+    print("\n  Cross-timeframe patterns:")
+    print(f"  {'Pattern':<18} {'Status':<10} {'Slope/day':>10}  Product")
+    print("  " + "-" * 70)
+    for p in sorted(cross_patterns, key=lambda x: x["pattern"]):
+        slope = float(p["slope_pct_per_day"] or 0.0) * 100
+        print(
+            f"  {p['pattern']:<18} {p['status']:<10} {slope:>+9.2f}%  {p['title'][:40]}"
+        )
+
+    print(
+        f"\n  Analyzed {unique_products} product(s), "
+        f"found {len(patterns)} per-timeframe and {len(cross_patterns)} cross-timeframe patterns."
+    )
+
+
 # ── parser ────────────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -521,6 +665,13 @@ def build_parser() -> argparse.ArgumentParser:
     alrtp = sub.add_parser("alert", help="check success rates and push notifications")
     alrtp.set_defaults(func=_cmd_alert)
 
+    # ── pattern-alerts (cross-timeframe breakout/accelerating transitions) ────
+    patp = sub.add_parser(
+        "pattern-alerts",
+        help="check cross-timeframe pattern transitions and alert on breakout/accelerating",
+    )
+    patp.set_defaults(func=_cmd_pattern_alerts)
+
     fp = sub.add_parser("forget", help="GDPR Art. 17 right-to-erasure")
     fp.add_argument("email")
     fp.set_defaults(func=_cmd_forget)
@@ -531,6 +682,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lrp.add_argument("--days", type=int, default=7)
     lrp.set_defaults(func=_cmd_loop_report)
+
+    # ── discover (Shopify store discovery) ───────────────────────────────
+    dscp = sub.add_parser(
+        "discover",
+        help="discover new Shopify stores and update sources.json",
+    )
+    dscp.add_argument(
+        "--url", type=str, default=None,
+        help="validate a single URL and add if Shopify",
+    )
+    dscp.set_defaults(func=_cmd_discover)
+
+    # ── trends (historical pattern report) ─────────────────────────────────
+    trp = sub.add_parser(
+        "trends",
+        help="live historical trend report with pattern detection",
+    )
+    trp.add_argument("--days", type=int, default=30, help="lookback window (default 30)")
+    trp.set_defaults(func=_cmd_trends)
 
     return p
 

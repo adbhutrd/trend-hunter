@@ -188,6 +188,60 @@ _MIGRATIONS: list[tuple[int, str]] = [
             ON corrective_actions(outcome);
     """,
     ),
+    (
+        5,
+        """
+        -- Migration #5: trend_history — immutable ledger of product classifications.
+        -- Every run of classify_all appends a snapshot here so we can look back
+        -- at past trends, detect multi-window patterns (breakout, cooling, etc.),
+        -- and surface them in the live trend report.
+        -- timeframe_days distinguishes daily (1), weekly (7), 2-week (14),
+        -- monthly (30), and quarterly (90) windows for the same product.
+        CREATE TABLE IF NOT EXISTS trend_history (
+            source             TEXT NOT NULL,
+            external_id        TEXT NOT NULL,
+            title              TEXT,
+            status             TEXT,
+            slope_pct_per_day  DOUBLE,
+            n_points           INTEGER,
+            window_start       TIMESTAMP,
+            window_end         TIMESTAMP NOT NULL,
+            timeframe_days     INTEGER NOT NULL,
+            recorded_at        TIMESTAMP DEFAULT current_timestamp,
+            PRIMARY KEY (source, external_id, timeframe_days, window_end)
+        );
+        CREATE INDEX IF NOT EXISTS idx_trend_history_ext
+            ON trend_history(source, external_id);
+        CREATE INDEX IF NOT EXISTS idx_trend_history_window
+            ON trend_history(window_end);
+        CREATE INDEX IF NOT EXISTS idx_trend_history_tf
+            ON trend_history(timeframe_days);
+    """,
+    ),
+    (
+        6,
+        """
+        -- Migration #6: cross_timeframe_patterns — latest cross-timeframe pattern
+        -- per product. Used to detect transitions into breakout/accelerating and
+        -- to avoid duplicate alerts. Updated idempotently by classify_all.
+        CREATE TABLE IF NOT EXISTS cross_timeframe_patterns (
+            source            TEXT NOT NULL,
+            external_id       TEXT NOT NULL,
+            title             TEXT,
+            pattern           TEXT NOT NULL,
+            status            TEXT,
+            slope_pct_per_day DOUBLE,
+            window_end        TIMESTAMP,
+            detected_at       TIMESTAMP DEFAULT current_timestamp,
+            alerted_at        TIMESTAMP,
+            PRIMARY KEY (source, external_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_cross_tf_pattern
+            ON cross_timeframe_patterns(pattern);
+        CREATE INDEX IF NOT EXISTS idx_cross_tf_alerted
+            ON cross_timeframe_patterns(alerted_at);
+    """,
+    ),
 ]
 
 
@@ -271,7 +325,18 @@ class DuckDBStorage:
     # ── connection ──────────────────────────────────────────────────────────
     def conn(self) -> duckdb.DuckDBPyConnection:
         if self.read_only:
-            return duckdb.connect(str(self.db_path), read_only=True)
+            import time as _time
+            # Retry a few times — DuckDB blocks read-only connections while a
+            # writer holds the DB open. The scheduler's writer window is brief
+            # (a few seconds), so a short backoff is almost always enough.
+            for attempt in range(10):
+                try:
+                    return duckdb.connect(str(self.db_path), read_only=True)
+                except duckdb.IOException as e:
+                    if "Could not set lock" in str(e) and attempt < 9:
+                        _time.sleep(0.5)
+                        continue
+                    raise
         if self._writer_conn is None:
             self._writer_conn = duckdb.connect(str(self.db_path))
             self._writer_conn.execute("PRAGMA threads=4")

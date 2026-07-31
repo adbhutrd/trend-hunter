@@ -23,11 +23,11 @@ from datetime import UTC, datetime, timedelta
 
 from loguru import logger
 
-from trend_hunter.adapters.storage_duckdb import DuckDBStorage
+from trend_hunter.adapters.storage_duckdb import _MIGRATIONS, DuckDBStorage
 from trend_hunter.core.config import get_settings
 from trend_hunter.core.logging import configure
 
-EXPECTED_SCHEMA_VERSION = 1
+EXPECTED_SCHEMA_VERSION = max(v for v, _ in _MIGRATIONS)
 MIN_FREE_DISK_MB = 200
 WARN_FREE_DISK_MB = 1024
 MAX_AGE_HOURS_DEFAULT = 48
@@ -90,9 +90,13 @@ def doctor() -> int:
                     name = r["source"]
                     state = r["state"]
                     last_run = r["last_run"]
-                    age = (
-                        (datetime.now(UTC) - last_run).total_seconds() / 3600 if last_run else None
-                    )
+                    if last_run is None:
+                        age = None
+                    else:
+                        # DuckDB may return naive timestamps; treat them as UTC.
+                        if last_run.tzinfo is None:
+                            last_run = last_run.replace(tzinfo=UTC)
+                        age = (datetime.now(UTC) - last_run).total_seconds() / 3600
                     if state in ("failing", "dead"):
                         log.error(
                             f"❌ {name}: state={state} last_run={last_run} detail={r['detail']}",

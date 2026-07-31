@@ -17,6 +17,9 @@ from trend_hunter.adapters.storage_duckdb import DuckDBStorage
 from trend_hunter.intelligence.classifier import classify_one
 from trend_hunter.observe.calibrate import auto_resolve_calibrations
 
+# Timeframes (in days) for which we classify and historize product trends.
+TIMEFRAMES = (1, 7, 14, 30, 90)
+
 
 # ── aggregates ───────────────────────────────────────────────────────────────
 def aggregate(storage: DuckDBStorage) -> dict:
@@ -118,12 +121,18 @@ def aggregate(storage: DuckDBStorage) -> dict:
     }
 
 
-def classify_all(storage: DuckDBStorage) -> int:
+def classify_all(storage: DuckDBStorage) -> dict[str, int]:
     """Run classify_one() over every product with ≥3 price observations.
 
-    Writes per-(source, external_id) classifications into
+    Writes per-(source, external_id, timeframe_days) classifications into
     `agg_product_status` (replaces the table created by aggregate()).
-    Cheap, idempotent. Used by dashboard auto-refresh.
+    Also appends an immutable snapshot to ``trend_history`` for every
+    timeframe so past patterns can be detected later.
+
+    Returns
+    -------
+    ``{"products": int, "snapshots": int}`` — the number of unique products
+    classified and the total number of (product × timeframe) snapshots.
     """
     c = storage.conn()
     rows = c.execute(
@@ -145,33 +154,40 @@ def classify_all(storage: DuckDBStorage) -> int:
             by_key[key] = (title, [])
         by_key[key][1].append((src, ext, ts, price))
 
-    classified = []
+    # ── classify across multiple timeframes for richer history ─────────────
+    # We run the same least-squares classifier for 1d, 7d, 14d, 30d, 90d.
+    # timeframe_days is stored so snapshots for different windows never collide.
+    classified: list[dict] = []
     for (src, ext), (title, hist) in by_key.items():
-        c_p = classify_one(hist)
-        if c_p is None:
-            continue
-        classified.append(
-            {
-                "source": src,
-                "external_id": ext,
-                "title": title,
-                "status": c_p.status,
-                "slope_pct_per_day": c_p.slope_pct_per_day,
-                "n_points": c_p.n_points,
-                "window_start": c_p.window_start,
-                "window_end": c_p.window_end,
-            }
-        )
+        for window_days in TIMEFRAMES:
+            c_p = classify_one(hist, window_days=window_days)
+            if c_p is None:
+                continue
+            classified.append(
+                {
+                    "source": src,
+                    "external_id": ext,
+                    "title": title,
+                    "status": c_p.status,
+                    "slope_pct_per_day": c_p.slope_pct_per_day,
+                    "n_points": c_p.n_points,
+                    "window_start": c_p.window_start,
+                    "window_end": c_p.window_end,
+                    "timeframe_days": c_p.timeframe_days,
+                }
+            )
 
+    # Always replace agg_product_status so its schema matches the
+    # classification shape, even when there are no classified rows.
+    c.execute("DROP TABLE IF EXISTS agg_product_status")
     if classified:
-        pd.DataFrame(classified)
-        c.execute("DROP TABLE IF EXISTS agg_product_status")
-        c.execute("CREATE TABLE agg_product_status AS SELECT * FROM df")
+        c.register("classified_df", pd.DataFrame(classified))
+        c.execute("CREATE TABLE agg_product_status AS SELECT * FROM classified_df")
     else:
         # Empty DB / no rows yet — keep the schema so dashboard readers don't crash.
         c.execute(
             """
-            CREATE TABLE IF NOT EXISTS agg_product_status (
+            CREATE TABLE agg_product_status (
                 source             TEXT,
                 external_id        TEXT,
                 title              TEXT,
@@ -179,10 +195,49 @@ def classify_all(storage: DuckDBStorage) -> int:
                 slope_pct_per_day  DOUBLE,
                 n_points           INTEGER,
                 window_start       TIMESTAMP,
-                window_end         TIMESTAMP
+                window_end         TIMESTAMP,
+                timeframe_days   INTEGER
             )
             """,
         )
 
-    logger.info(f"classifier: wrote classification for {len(classified)} products")
-    return len(classified)
+    # ── historize classifications for pattern detection ─────────────────────
+    # We insert the current snapshot into trend_history.  The PK
+    # (source, external_id, timeframe_days, window_end) makes this idempotent
+    # across re-runs while keeping distinct windows for the same product.
+    c.execute(
+        """
+        INSERT INTO trend_history (
+            source, external_id, title, status, slope_pct_per_day,
+            n_points, window_start, window_end, timeframe_days
+        )
+        SELECT source, external_id, title, status, slope_pct_per_day,
+               n_points, window_start, window_end, timeframe_days
+        FROM agg_product_status
+        """,
+    )
+
+    logger.info(
+        f"classifier: wrote {len(classified)} snapshots for {len(by_key)} products"
+    )
+
+    # ── retention: keep trend_history manageable ────────────────────────────
+    c.execute("DELETE FROM trend_history WHERE window_end < now() - INTERVAL 90 DAY")
+    kept = c.execute("SELECT count(*) FROM trend_history").fetchone()[0]
+    logger.info(f"trend_history: pruned, {kept} rows remaining")
+
+    # ── cross-timeframe pattern-change alerts ───────────────────────────────
+    # Run after historizing so the alert check sees the freshly written
+    # snapshots and can compare against the previous cross-timeframe state.
+    from trend_hunter.observe.pattern_alerts import check_pattern_alerts
+
+    try:
+        alert_summary = check_pattern_alerts(storage)
+        logger.info(
+            f"pattern alerts: checked {alert_summary['checked']} products, "
+            f"alerted {alert_summary['alerted']}"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pattern alerts check failed: %s", exc)
+
+    return {"products": len(by_key), "snapshots": len(classified)}

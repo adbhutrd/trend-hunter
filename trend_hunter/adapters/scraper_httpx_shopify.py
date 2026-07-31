@@ -1,8 +1,7 @@
-"""First scraper adapter — Shopify public /products.json (no auth, no key).
+"""Shopify scraper — fetches ALL products from /products.json with pagination.
 
-Implements core.ports.Scraper for one source only: Shopify.
-Other sources (Reddit, Meta ADL, TikTok, Google Trends, AliExpress)
-will live in sibling files; this is the proven, tested backbone.
+No auth, no key. Crawls every page of every store to collect every product.
+Handles rate limits with per-store delays, browser-like headers, and jitter.
 """
 
 from __future__ import annotations
@@ -15,14 +14,17 @@ from pathlib import Path
 
 import httpx
 from loguru import logger
-from tenacity import (
-    AsyncRetrying,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential_jitter,
-)
 
 from trend_hunter.core.types import Health, HealthState, RawSignal
+
+# Rotating User-Agent pool — mimics real browsers to avoid 429 blocks.
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+]
 
 
 class ShopifyScraper:
@@ -32,33 +34,33 @@ class ShopifyScraper:
         self,
         stores: list[str],
         *,
-        user_agent: str = "trend-hunter/0.1 (anonwiz)",
-        max_concurrent: int = 2,
-        request_jitter_s: tuple[int, int] = (1, 3),
-        timeout_s: float = 20.0,
+        max_concurrent: int = 3,
+        per_store_delay_s: float = 0.5,  # delay between pages (lower=300s faster)
+        timeout_s: float = 15.0,
+        max_pages: int = 5,  # 5 pages × 250 products = 1250 max per store
     ) -> None:
         self.stores = stores
-        self.user_agent = user_agent
-        self._sem = asyncio.Semaphore(max(1, max_concurrent))
-        self._jitter = request_jitter_s
+        self.max_concurrent = max(1, max_concurrent)
+        self.per_store_delay_s = per_store_delay_s  # Base delay between pages
         self.timeout_s = timeout_s
+        self.max_pages = max_pages
+        self._store_sem = asyncio.Semaphore(self.max_concurrent)
 
-    # ── Scraper protocol ───────────────────────────────────────────────────
     async def fetch(self) -> list[RawSignal]:
         signals: list[RawSignal] = []
         now = datetime.now(UTC)
         async with httpx.AsyncClient(
-            headers={"User-Agent": self.user_agent, "Accept": "application/json"},
-            timeout=httpx.Timeout(self.timeout_s),
+            timeout=httpx.Timeout(self.timeout_s, connect=10.0),
             follow_redirects=True,
         ) as client:
             tasks = [self._fetch_store(client, s, now) for s in self.stores]
-            for coro in asyncio.as_completed(tasks):
-                try:
-                    signals.extend(await coro)
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(f"shopify: store task failed: {type(e).__name__}: {e}")
-        logger.info(f"shopify: ingested {len(signals)} products across {len(self.stores)} stores")
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.warning(f"shopify: {self.stores[i]} failed: {result}")
+                else:
+                    signals.extend(result)
+        logger.info(f"shopify: {len(signals)} products across {len(self.stores)} stores")
         return signals
 
     async def health(self) -> Health:
@@ -73,73 +75,104 @@ class ShopifyScraper:
             detail=f"{len(self.stores)} store(s) configured",
         )
 
-    # ── internals ──────────────────────────────────────────────────────────
     async def _fetch_store(
         self,
         client: httpx.AsyncClient,
-        url: str,
+        store_url: str,
         run_ts: datetime,
     ) -> list[RawSignal]:
-        async with self._sem:
-            await asyncio.sleep(random.uniform(*self._jitter))
-            url = url.rstrip("/")
-            target = f"{url}/products.json"
-            try:
-                r = await self._get_with_retry(client, target)
-            except Exception as e:  # noqa: BLE001
-                logger.warning(f"shopify: {target} → {type(e).__name__}: {e}")
-                return []
+        """Fetch ALL products from one Shopify store using pagination.
 
-            try:
-                data = r.json()
-            except json.JSONDecodeError as e:
-                logger.warning(f"shopify: {target} → json decode: {e}")
-                return []
+        Uses per-store semaphore to limit concurrent store scraping,
+        plus per-page jitter delay to avoid triggering Shopify rate limits.
+        """
+        async with self._store_sem:
+            store_url = store_url.rstrip("/")
+            signals = []
+            page = 1
+            consecutive_429s = 0
+            max_429s = 3  # Give up after this many consecutive 429s on the same store
 
-            products = data.get("products") or []
-            return [
-                RawSignal(
-                    source=self.name,
-                    external_id=str(p.get("id") or ""),
-                    captured_at=run_ts,
-                    payload=p,
-                )
-                for p in products
-                if p.get("id") is not None
-            ]
+            while page <= self.max_pages and consecutive_429s < max_429s:
+                # Random per-page delay (base + jitter)
+                delay = self.per_store_delay_s + random.uniform(0.5, 2.0)
+                await asyncio.sleep(delay)
 
-    async def _get_with_retry(
-        self,
-        client: httpx.AsyncClient,
-        url: str,
-    ) -> httpx.Response:
-        try:
-            async for attempt in AsyncRetrying(
-                stop=stop_after_attempt(3),
-                wait=wait_exponential_jitter(initial=2, max=20),
-                retry=retry_if_exception_type(
-                    (httpx.HTTPError, httpx.TimeoutException),
-                ),
-                reraise=True,
-            ):
-                with attempt:
-                    r = await client.get(url)
-                    if r.status_code == 429:
-                        # Surfaces as a retryable httpx error
-                        raise httpx.HTTPStatusError(
-                            "rate-limited",
-                            request=r.request,
-                            response=r,
+                # Use a random User-Agent for each request
+                ua = random.choice(_USER_AGENTS)
+                target = f"{store_url}/products.json?page={page}&limit=250"
+                headers = {
+                    "User-Agent": ua,
+                    "Accept": "application/json, text/plain, */*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Referer": store_url,
+                    "Cache-Control": "no-cache",
+                }
+
+                try:
+                    r = await client.get(target, headers=headers)
+                except (httpx.TimeoutException, httpx.ConnectError) as e:
+                    logger.debug(f"shopify: {target} connection error: {e}")
+                    # Back off and retry page
+                    await asyncio.sleep(5.0)
+                    continue
+
+                if r.status_code == 429:
+                    consecutive_429s += 1
+                    backoff = 5.0 * consecutive_429s + random.uniform(1.0, 3.0)
+                    logger.debug(
+                        f"shopify: 429 on {store_url} page {page} "
+                        f"(attempt {consecutive_429s}/{max_429s}) — "
+                        f"backoff {backoff:.0f}s"
+                    )
+                    await asyncio.sleep(backoff)
+                    continue  # Retry same page
+
+                consecutive_429s = 0  # Reset on success
+
+                if r.status_code in (404, 410, 451):
+                    break  # No more pages / store removed
+
+                if r.status_code != 200:
+                    logger.warning(
+                        f"shopify: {target} -> {r.status_code} (page {page})"
+                    )
+                    break
+
+                try:
+                    data = r.json()
+                except json.JSONDecodeError:
+                    logger.debug(f"shopify: {target} bad JSON (page {page})")
+                    break
+
+                products = data.get("products") or []
+                if not products:
+                    break  # No more products
+
+                for p in products:
+                    pid = p.get("id")
+                    if pid is None:
+                        continue
+                    p["_store_url"] = store_url
+                    signals.append(
+                        RawSignal(
+                            source=self.name,
+                            external_id=str(pid),
+                            captured_at=run_ts,
+                            payload=p,
                         )
-                    r.raise_for_status()
-                    return r
-        except Exception:
-            # defensively re-raise — tenacity's reraise=True already does this,
-            # but explicitly returning to the caller keeps the API predictable.
-            raise
+                    )
+
+                page += 1
+
+            if page > 1:
+                logger.info(
+                    f"shopify: {store_url} -> {len(signals)} products "
+                    f"({page - 1} pages, {consecutive_429s} rate-limits)"
+                )
+            return signals
 
 
-# ── convenience factory ─────────────────────────────────────────────────────
 def from_sources_json(path: Path = Path("./sources.json")) -> ShopifyScraper:
     """Build a ShopifyScraper from sources.json. Empty list if no stores."""
     if not path.exists():

@@ -35,6 +35,7 @@ class ClassifiedProduct:
     n_points: int
     window_start: datetime
     window_end: datetime
+    timeframe_days: int
 
 
 def _slope(xs: list[float], ys: list[float]) -> float:
@@ -55,8 +56,8 @@ def classify_one(
     history: Iterable[tuple[str, str, datetime, float | None]],
     *,
     window_days: int = 7,
-    rising_threshold: float = 0.05,
-    declining_threshold: float = -0.05,
+    rising_threshold: float = 0.03,
+    declining_threshold: float = -0.03,
 ) -> ClassifiedProduct | None:
     """Classify the trend of one product given its history.
 
@@ -79,7 +80,7 @@ def classify_one(
         if s == src and e == ext and t.astimezone(UTC) >= cutoff and p is not None
     ]
     points.sort(key=lambda x: x[0])
-    if len(points) < 3:
+    if len(points) < 2:
         return ClassifiedProduct(
             source=src,
             external_id=ext,
@@ -89,6 +90,7 @@ def classify_one(
             n_points=len(points),
             window_start=points[0][0] if points else now,
             window_end=points[-1][0] if points else now,
+            timeframe_days=window_days,
         )
 
     xs = [p[0].timestamp() for p in points]
@@ -118,4 +120,5 @@ def classify_one(
         n_points=len(points),
         window_start=points[0][0],
         window_end=points[-1][0],
+        timeframe_days=window_days,
     )

@@ -81,8 +81,20 @@ calibrate-backfill: migrate ## resolve overdue calibrations one-shot (auto-resol
 alert: ## check success rates and push notifications if degraded
 	$(VENV_PY) -m trend_hunter.cli alert
 
-schedule: ## start APScheduler (foreground; systemd-friendly)
-	$(VENV_PY) -m trend_hunter.cli schedule
+schedule: ## start auto-scheduler (foreground; systemd-friendly)
+	$(VENV_PY) -m trend_hunter.flows.daily
+
+install-service: scripts/install-service.sh ## install + enable + start the systemd auto-scheduler
+	bash scripts/install-service.sh
+
+uninstall-service: scripts/install-service.sh ## stop + disable + remove the systemd scheduler service
+	bash scripts/install-service.sh --uninstall
+
+service-status: ## check if the scheduler service is running
+	systemctl --user --no-pager status buffy-scheduler 2>&1 || echo "(not installed — run 'make install-service')"
+
+service-logs: ## tail the scheduler service logs
+	journalctl --user -u buffy-scheduler -n 50 --no-pager
 
 dashboard: ## start Streamlit on http://localhost:8501
 	$(VENV_PY) -m streamlit run trend_hunter/ui/Home.py --server.port 8501 --server.headless true

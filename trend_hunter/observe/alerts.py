@@ -1,7 +1,8 @@
 """Alerts — push notifications when the feedback loop detects degradation.
 
-Reads ``Settings.discord_webhook``, ``Settings.telegram_bot_token``, and
-``Settings.telegram_chat_id``.  All are optional — if none are configured
+Reads ``Settings.discord_webhook``, ``Settings.telegram_bot_token``,
+``Settings.telegram_chat_id``, ``Settings.gmail_address``, and
+``Settings.gmail_app_password``.  All are optional — if none are configured
 the module is a silent no-op.
 
 Usage::
@@ -13,9 +14,13 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import json
 import urllib.request
+from email.message import EmailMessage
 from typing import Any
+
+import aiosmtplib
 
 from trend_hunter.observe.run_ledger import success_rate
 
@@ -70,31 +75,80 @@ def _send_telegram(token: str, chat_id: str, message: str) -> None:
         get().warning("telegram alert failed: %s", exc)
 
 
+# ── email dispatcher ─────────────────────────────────────────────────────────
+def _send_email(
+    username: str,
+    password: str,
+    recipient: str,
+    subject: str,
+    body: str,
+) -> None:
+    """Send email via Gmail SMTP using an app password.
+
+    Runs the async aiosmtplib call inside ``asyncio.run()`` so this
+    function remains synchronous and fits the existing alerting API.
+    """
+    msg = EmailMessage()
+    msg["From"] = username
+    msg["To"] = recipient
+    msg["Subject"] = subject
+    msg.set_content(body)
+
+    async def _send() -> None:
+        await aiosmtplib.send(
+            msg,
+            hostname="smtp.gmail.com",
+            port=465,
+            use_tls=True,
+            username=username,
+            password=password,
+            timeout=READ_TIMEOUT_S,
+        )
+
+    try:
+        asyncio.run(_send())
+    except Exception as exc:  # noqa: BLE001
+        from trend_hunter.core.logging import get
+
+        get().warning("email alert failed: %s", exc)
+
+
 # ── public helpers ─────────────────────────────────────────────────────────────
 def notify(  # noqa: PLR0913
     message: str,
     *,
+    subject: str | None = None,
     discord_webhook: str | None = None,
     telegram_bot_token: str | None = None,
     telegram_chat_id: str | None = None,
+    email_recipient: str | None = None,
 ) -> None:
     """Deliver *message* to every configured channel.
 
     Call with keyword args from your own ``Settings`` instance, or omit them
     all — the function will load ``get_settings()`` automatically.
     """
-    if discord_webhook or telegram_bot_token:
-        from trend_hunter.core.config import get_settings
+    from trend_hunter.core.config import get_settings
 
-        s = get_settings()
-        wh = discord_webhook or s.discord_webhook
-        tok = telegram_bot_token or s.telegram_bot_token
-        cid = telegram_chat_id or s.telegram_chat_id
+    s = get_settings()
+    wh = discord_webhook or s.discord_webhook
+    tok = telegram_bot_token or s.telegram_bot_token
+    cid = telegram_chat_id or s.telegram_chat_id
+    gmail = s.gmail_address
+    gmail_pwd = s.gmail_app_password
 
-        if wh:
-            _send_discord(wh, message)
-        if tok and cid:
-            _send_telegram(tok, cid, message)
+    if wh:
+        _send_discord(wh, message)
+    if tok and cid:
+        _send_telegram(tok, cid, message)
+    if gmail and gmail_pwd:
+        _send_email(
+            gmail,
+            gmail_pwd,
+            email_recipient or gmail,
+            subject or "trend-hunter alert",
+            message,
+        )
 
 
 def maybe_alert_on_success_rate(
