@@ -1,19 +1,25 @@
-GNU AFFERO GENERAL PUBLIC LICENSE
-Version 3, 19 November 2007
+COPYRIGHT & LICENSE
+====================
 
-Copyright (c) 2026 anonwiz
+Copyright (c) 2026 Adbhut Ram Das
+All rights reserved.
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published
-by the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+This software and associated documentation files (the "Software") are the
+intellectual property of Adbhut Ram Das. The Software is provided for
+personal, educational, and evaluation purposes only.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
+Permission is NOT granted to copy, modify, merge, publish, distribute,
+sublicense, or sell copies of the Software, or to use it for any commercial
+purpose, without the prior written permission of the copyright holder.
 
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/agpl-3.0.txt>.
+Unauthorized use, reproduction, or distribution of this Software, in whole
+or in part, whether by electronic, mechanical, or other means, is strictly
+prohibited and may result in civil and criminal penalties.
 
-Full text: https://www.gnu.org/licenses/agpl-3.0.txt
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
