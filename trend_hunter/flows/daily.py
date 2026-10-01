@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from loguru import logger
@@ -120,6 +121,6 @@ if __name__ == "__main__":
 
     try:
         while True:
-            dt.datetime.now(dt.UTC).timestamp()
+            time.sleep(1)
     except (KeyboardInterrupt, SystemExit):
         sched.shutdown(wait=False)
